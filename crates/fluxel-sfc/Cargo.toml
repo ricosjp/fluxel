@@ -1,0 +1,9 @@
+[package]
+name = "fluxel-sfc"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+description = "SFC (Space Filling Curve) and Key management for Fluxel"
+
+[dependencies]
+# No external dependencies for now for SFC core
