@@ -1,0 +1,16 @@
+# GCIBM mesh export configuration for export_gcibm.py
+#
+# Paths are relative to the current working directory unless absolute.
+
+input_stl: "data/stl/DrivAer.stl"
+output_vtu: "examples/output/gcibm/gcibm_DrivAer.vtu"
+
+target_level: 3
+n_leaf_refinement: 3
+base_resolution: [8, 4, 2]
+
+bounding_box:
+  min: [-5.0, -4.0, 0.0]
+  max: [11.0, 4.0, 4.0]
+
+fluid_seed_point: [-4.0, 0.0, 2.0]
