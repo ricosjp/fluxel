@@ -1,0 +1,22 @@
+[package]
+name = "fluxel-pyo3"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+
+[dependencies]
+# Fluxel crates
+fluxel-core = { path = "../fluxel-core" }
+fluxel-geometry = { path = "../fluxel-geometry" }
+fluxel-ibm = { path = "../fluxel-ibm" }
+fluxel-export = { path = "../fluxel-export" }
+fluxel-sfc = { path = "../fluxel-sfc" }
+
+# Python bindings
+pyo3 = { version = "0.28.2", features = ["abi3-py39", "extension-module"] }
+
+# NumPy bindings
+numpy = "0.28.0"
+
+# IO libraries
+stl_io = "0.10.0"
