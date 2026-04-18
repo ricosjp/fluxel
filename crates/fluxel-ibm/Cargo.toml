@@ -1,0 +1,18 @@
+[package]
+name = "fluxel-ibm"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+
+[dependencies]
+# Fluxel crates
+fluxel-core = { path = "../fluxel-core" }
+fluxel-sfc = { path = "../fluxel-sfc" }
+fluxel-geometry = { path = "../fluxel-geometry" }
+
+# Threading libraries
+rayon.workspace = true
+# Spatial collision detection libraries
+parry3d-f64.workspace = true
+# Linear algebra libraries
+nalgebra = "0.34.2"
