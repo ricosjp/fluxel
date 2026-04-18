@@ -1,0 +1,9 @@
+[package]
+name = "fluxel-core"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+
+[dependencies]
+fluxel-sfc = { path = "../fluxel-sfc" }
+rayon.workspace = true
