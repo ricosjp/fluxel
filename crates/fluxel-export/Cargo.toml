@@ -1,0 +1,11 @@
+[package]
+name = "fluxel-export"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+
+[dependencies]
+fluxel-core = { path = "../fluxel-core" }
+fluxel-geometry = { path = "../fluxel-geometry" }
+fluxel-ibm = { path = "../fluxel-ibm" }
+rayon.workspace = true
