@@ -1,0 +1,39 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/fluxel-core",
+    "crates/fluxel-sfc",
+    "crates/fluxel-geometry",
+    "crates/fluxel-ibm",
+    "crates/fluxel-export",
+    "crates/fluxel-pyo3"
+]
+
+[workspace.package]
+name = "fluxel"
+version = "0.1.0"
+edition = "2021"
+description = "An extremely fast grid generation library for gridfoam, written in Rust."
+readme = "README.md"
+authors = ["Daichi Ishida", "ishida@ricos.co.jp"]
+keywords = ["physics", "simulation", "grid", "octree", "fluid"]
+categories = ["science", "aerospace::simulation"]
+
+
+[workspace.dependencies]
+# Threading libraries
+rayon = "1.11.0"
+
+# Spatial collision detection libraries
+parry3d-f64 = "0.26.0"
+
+# Dev dependencies
+rstest = "0.26.1"
+tempfile = "3.26.0"
+
+
+[profile.release]
+# CFD用のメッシュ生成において実行速度を最大化するための最適化設定
+opt-level = 3
+lto = "thin"
+# lto = "fat"

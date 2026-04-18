@@ -1,0 +1,49 @@
+[build-system]
+requires = ["maturin>=1.0,<2.0"]
+build-backend = "maturin"
+
+[project]
+name = "fluxel"
+version = "0.1.0"
+description = "An extremely fast hierarchical grid mesh generator for CFD solvers"
+readme = "README.md"
+license = { text = "Apache-2.0" }
+authors = [{ name = "RICOS Co. Ltd." }]
+requires-python = ">=3.12,<3.13"
+classifiers = ["Programming Language :: Python", "Programming Language :: Rust"]
+dependencies = [
+    "numpy>=2.4.4",
+]
+
+[dependency-groups]
+dev = [
+    { include-group = "examples" },
+    { include-group = "test" },
+    { include-group = "lint" },
+]
+examples = [
+    "pydantic",
+    "pyvista",
+    "pyyaml",
+]
+test = [
+    "pytest",
+    "pytest-benchmark",
+]
+lint = ["ruff"]
+docs = [
+    "sphinx",
+    "pydata-sphinx-theme",
+    "sphinx-gallery",
+    "sphinx-copybutton",
+    "numpydoc",
+    "sphinxcontrib-mermaid",
+    "sphinx-codeautolink",
+    "imageio",                            # gif animation
+]
+
+[tool.maturin]
+bindings = "pyo3"
+python-source = "src"
+manifest-path = "crates/fluxel-pyo3/Cargo.toml"
+module-name = "fluxel._fluxel"
