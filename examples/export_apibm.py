@@ -17,7 +17,13 @@ import pyvista as pv
 import yaml
 from pydantic import BaseModel, Field, field_validator
 
-from fluxel import BoundingBox, CfdAxisProjectedMesh, FluxelManager
+from fluxel import (
+    Axis,
+    BoundingBox,
+    CfdAxisProjectedMesh,
+    Direction,
+    FluxelManager,
+)
 
 
 class BoundingBoxConfig(BaseModel, frozen=True):
@@ -182,10 +188,9 @@ def export_axis_projected_polylines(
     first the owner-side stencil (Far_o, C_o, B),
     then the neighbour-side stencil (Far_n, C_n, B).
     """
-    has_bnd = np.asarray(has_bnd, dtype=bool)
     n_hit = int(np.sum(has_bnd))
-    owner_bnd_anchor_id = np.asarray(owner_bnd_anchor_id)
-    neighbour_bnd_anchor_id = np.asarray(neighbour_bnd_anchor_id)
+    owner_bnd_anchor_id = owner_bnd_anchor_id
+    neighbour_bnd_anchor_id = neighbour_bnd_anchor_id
     if n_hit != len(owner_bnd_anchor_id) or n_hit != len(
         neighbour_bnd_anchor_id
     ):
@@ -255,6 +260,39 @@ def export_axis_projected_polylines(
     print(f"Saved {axis} polylines to {output_prefix}_polylines_{axis}.vtp")
 
 
+def _axis_internal_mesh_slice(
+    mesh: CfdAxisProjectedMesh, axis: Axis
+) -> tuple[
+    np.ndarray,
+    np.ndarray,
+    np.ndarray,
+    np.ndarray,
+    np.ndarray,
+    np.ndarray,
+    np.ndarray,
+    np.ndarray,
+    np.ndarray,
+    np.ndarray,
+    np.ndarray,
+]:
+    """Return per-axis interior-face arrays (same order as the Rust builder)."""
+    mask_for_n_faces = mesh.internal_faces_axis == axis.value
+    mask_for_n_has_bnd = mesh.internal_faces_axis[mesh.ap_has_bnd] == axis.value
+    return (
+        mesh.internal_faces_owner[mask_for_n_faces],
+        mesh.internal_faces_neighbour[mask_for_n_faces],
+        mesh.ap_has_bnd[mask_for_n_faces],
+        mesh.ap_dist_owner_to_bnd[mask_for_n_has_bnd],
+        mesh.ap_dist_neighbour_to_bnd[mask_for_n_has_bnd],
+        mesh.ap_owner_far_cell_id[mask_for_n_has_bnd],
+        mesh.ap_neighbour_far_cell_id[mask_for_n_has_bnd],
+        mesh.ap_owner_weights[mask_for_n_has_bnd],
+        mesh.ap_neighbour_weights[mask_for_n_has_bnd],
+        mesh.ap_owner_bnd_anchor_id[mask_for_n_has_bnd],
+        mesh.ap_neighbour_bnd_anchor_id[mask_for_n_has_bnd],
+    )
+
+
 def export_apibm_debug_data(
     mesh: CfdAxisProjectedMesh, output_prefix: str = "apibm_debug"
 ) -> None:
@@ -270,89 +308,69 @@ def export_apibm_debug_data(
     """
     np.savez_compressed(
         f"{output_prefix}.npz",
-        ap_x_has_bnd=np.asarray(mesh.ap_x_has_bnd),
-        ap_x_dist_owner_to_bnd=np.asarray(mesh.ap_x_dist_owner_to_bnd),
-        ap_x_dist_neighbour_to_bnd=np.asarray(mesh.ap_x_dist_neighbour_to_bnd),
-        ap_x_owner_far_cell_id=np.asarray(mesh.ap_x_owner_far_cell_id),
-        ap_x_neighbour_far_cell_id=np.asarray(mesh.ap_x_neighbour_far_cell_id),
-        ap_x_owner_weights=np.asarray(mesh.ap_x_owner_weights),
-        ap_x_neighbour_weights=np.asarray(mesh.ap_x_neighbour_weights),
-        ap_x_owner_bnd_anchor_id=np.asarray(mesh.ap_x_owner_bnd_anchor_id),
-        ap_x_neighbour_bnd_anchor_id=np.asarray(
-            mesh.ap_x_neighbour_bnd_anchor_id
-        ),
-        ap_y_has_bnd=np.asarray(mesh.ap_y_has_bnd),
-        ap_y_dist_owner_to_bnd=np.asarray(mesh.ap_y_dist_owner_to_bnd),
-        ap_y_dist_neighbour_to_bnd=np.asarray(mesh.ap_y_dist_neighbour_to_bnd),
-        ap_y_owner_far_cell_id=np.asarray(mesh.ap_y_owner_far_cell_id),
-        ap_y_neighbour_far_cell_id=np.asarray(mesh.ap_y_neighbour_far_cell_id),
-        ap_y_owner_weights=np.asarray(mesh.ap_y_owner_weights),
-        ap_y_neighbour_weights=np.asarray(mesh.ap_y_neighbour_weights),
-        ap_y_owner_bnd_anchor_id=np.asarray(mesh.ap_y_owner_bnd_anchor_id),
-        ap_y_neighbour_bnd_anchor_id=np.asarray(
-            mesh.ap_y_neighbour_bnd_anchor_id
-        ),
-        ap_z_has_bnd=np.asarray(mesh.ap_z_has_bnd),
-        ap_z_dist_owner_to_bnd=np.asarray(mesh.ap_z_dist_owner_to_bnd),
-        ap_z_dist_neighbour_to_bnd=np.asarray(mesh.ap_z_dist_neighbour_to_bnd),
-        ap_z_owner_far_cell_id=np.asarray(mesh.ap_z_owner_far_cell_id),
-        ap_z_neighbour_far_cell_id=np.asarray(mesh.ap_z_neighbour_far_cell_id),
-        ap_z_owner_weights=np.asarray(mesh.ap_z_owner_weights),
-        ap_z_neighbour_weights=np.asarray(mesh.ap_z_neighbour_weights),
-        ap_z_owner_bnd_anchor_id=np.asarray(mesh.ap_z_owner_bnd_anchor_id),
-        ap_z_neighbour_bnd_anchor_id=np.asarray(
-            mesh.ap_z_neighbour_bnd_anchor_id
-        ),
+        internal_faces_owner=mesh.internal_faces_owner,
+        internal_faces_neighbour=mesh.internal_faces_neighbour,
+        internal_faces_axis=mesh.internal_faces_axis,
+        bnd_faces_owner=mesh.bnd_faces_owner,
+        bnd_faces_dir=mesh.bnd_faces_dir,
+        ap_has_bnd=mesh.ap_has_bnd,
+        ap_dist_owner_to_bnd=mesh.ap_dist_owner_to_bnd,
+        ap_dist_neighbour_to_bnd=mesh.ap_dist_neighbour_to_bnd,
+        ap_owner_far_cell_id=mesh.ap_owner_far_cell_id,
+        ap_neighbour_far_cell_id=mesh.ap_neighbour_far_cell_id,
+        ap_owner_weights=mesh.ap_owner_weights,
+        ap_neighbour_weights=mesh.ap_neighbour_weights,
+        ap_owner_bnd_anchor_id=mesh.ap_owner_bnd_anchor_id,
+        ap_neighbour_bnd_anchor_id=mesh.ap_neighbour_bnd_anchor_id,
     )
     print(f"Saved debug arrays to {output_prefix}.npz")
-    export_axis_projected_polylines(
-        axis="x",
-        cell_centers=mesh.cell_centers,
-        owner=mesh.x_faces_owner,
-        neighbour=mesh.x_faces_neighbour,
-        has_bnd=mesh.ap_x_has_bnd,
-        dist_owner_to_bnd=mesh.ap_x_dist_owner_to_bnd,
-        dist_neighbour_to_bnd=mesh.ap_x_dist_neighbour_to_bnd,
-        owner_far_cell_id=mesh.ap_x_owner_far_cell_id,
-        neighbour_far_cell_id=mesh.ap_x_neighbour_far_cell_id,
-        owner_weights=mesh.ap_x_owner_weights,
-        neighbour_weights=mesh.ap_x_neighbour_weights,
-        owner_bnd_anchor_id=mesh.ap_x_owner_bnd_anchor_id,
-        neighbour_bnd_anchor_id=mesh.ap_x_neighbour_bnd_anchor_id,
-        output_prefix=output_prefix,
-    )
-    export_axis_projected_polylines(
-        axis="y",
-        cell_centers=mesh.cell_centers,
-        owner=mesh.y_faces_owner,
-        neighbour=mesh.y_faces_neighbour,
-        has_bnd=mesh.ap_y_has_bnd,
-        dist_owner_to_bnd=mesh.ap_y_dist_owner_to_bnd,
-        dist_neighbour_to_bnd=mesh.ap_y_dist_neighbour_to_bnd,
-        owner_far_cell_id=mesh.ap_y_owner_far_cell_id,
-        neighbour_far_cell_id=mesh.ap_y_neighbour_far_cell_id,
-        owner_weights=mesh.ap_y_owner_weights,
-        neighbour_weights=mesh.ap_y_neighbour_weights,
-        owner_bnd_anchor_id=mesh.ap_y_owner_bnd_anchor_id,
-        neighbour_bnd_anchor_id=mesh.ap_y_neighbour_bnd_anchor_id,
-        output_prefix=output_prefix,
-    )
-    export_axis_projected_polylines(
-        axis="z",
-        cell_centers=mesh.cell_centers,
-        owner=mesh.z_faces_owner,
-        neighbour=mesh.z_faces_neighbour,
-        has_bnd=mesh.ap_z_has_bnd,
-        dist_owner_to_bnd=mesh.ap_z_dist_owner_to_bnd,
-        dist_neighbour_to_bnd=mesh.ap_z_dist_neighbour_to_bnd,
-        owner_far_cell_id=mesh.ap_z_owner_far_cell_id,
-        neighbour_far_cell_id=mesh.ap_z_neighbour_far_cell_id,
-        owner_weights=mesh.ap_z_owner_weights,
-        neighbour_weights=mesh.ap_z_neighbour_weights,
-        owner_bnd_anchor_id=mesh.ap_z_owner_bnd_anchor_id,
-        neighbour_bnd_anchor_id=mesh.ap_z_neighbour_bnd_anchor_id,
-        output_prefix=output_prefix,
-    )
+    for axis_name, axis in (("x", Axis.X), ("y", Axis.Y), ("z", Axis.Z)):
+        (
+            owner,
+            neighbour,
+            has_bnd,
+            dist_o,
+            dist_n,
+            ofar,
+            nfar,
+            ow,
+            nw,
+            oba,
+            nba,
+        ) = _axis_internal_mesh_slice(mesh, axis)
+        export_axis_projected_polylines(
+            axis=axis_name,
+            cell_centers=mesh.cell_centers,
+            owner=owner,
+            neighbour=neighbour,
+            has_bnd=has_bnd,
+            dist_owner_to_bnd=dist_o,
+            dist_neighbour_to_bnd=dist_n,
+            owner_far_cell_id=ofar,
+            neighbour_far_cell_id=nfar,
+            owner_weights=ow,
+            neighbour_weights=nw,
+            owner_bnd_anchor_id=oba,
+            neighbour_bnd_anchor_id=nba,
+            output_prefix=output_prefix,
+        )
+
+def bnd_type_for_axis(mesh: CfdAxisProjectedMesh, axis: Axis) -> np.ndarray:
+    mask_for_n_has_bnd = mesh.internal_faces_axis[mesh.ap_has_bnd] == axis.value
+    # `==` binds looser than `&`; needs parentheses (otherwise compared to `axis & ap_has_bnd`).
+    mask_for_n_faces = (mesh.internal_faces_axis == axis.value) & mesh.ap_has_bnd
+    bt = np.zeros(mesh.n_cells, dtype=int)
+    of_m = mesh.ap_owner_far_cell_id[mask_for_n_has_bnd]
+    nf_m = mesh.ap_neighbour_far_cell_id[mask_for_n_has_bnd]
+    ow_m = mesh.internal_faces_owner[mask_for_n_faces]
+    nb_m = mesh.internal_faces_neighbour[mask_for_n_faces]
+    # Far stencil ids first, then owner/neighbour: same cell id can be both (Rust uses owner id
+    # when no valid far neighbour), in which case -1 / 1 overwrite -2 / 2.
+    bt[of_m] = -2
+    bt[nf_m] = 2
+    bt[ow_m] = -1
+    bt[nb_m] = 1
+    return bt
 
 
 def export_apibm_mesh(
@@ -373,23 +391,9 @@ def export_apibm_mesh(
     grid = mesh_to_unstructured_grid(mesh.cell_centers, mesh.cell_sizes)
 
     # セルデータの割り当て
-    n_cells = len(mesh.cell_centers)
-    x_bnd_type = np.zeros(n_cells, dtype=int)
-    x_bnd_type[mesh.ap_x_owner_far_cell_id] = -2
-    x_bnd_type[mesh.ap_x_neighbour_far_cell_id] = 2
-    x_bnd_type[mesh.x_faces_owner[mesh.ap_x_has_bnd]] = -1
-    x_bnd_type[mesh.x_faces_neighbour[mesh.ap_x_has_bnd]] = 1
-
-    y_bnd_type = np.zeros(n_cells, dtype=int)
-    y_bnd_type[mesh.ap_y_owner_far_cell_id] = -2
-    y_bnd_type[mesh.ap_y_neighbour_far_cell_id] = 2
-    y_bnd_type[mesh.y_faces_owner[mesh.ap_y_has_bnd]] = -1
-    y_bnd_type[mesh.y_faces_neighbour[mesh.ap_y_has_bnd]] = 1
-    z_bnd_type = np.zeros(n_cells, dtype=int)
-    z_bnd_type[mesh.ap_z_owner_far_cell_id] = -2
-    z_bnd_type[mesh.ap_z_neighbour_far_cell_id] = 2
-    z_bnd_type[mesh.z_faces_owner[mesh.ap_z_has_bnd]] = -1
-    z_bnd_type[mesh.z_faces_neighbour[mesh.ap_z_has_bnd]] = 1
+    x_bnd_type = bnd_type_for_axis(mesh, Axis.X)
+    y_bnd_type = bnd_type_for_axis(mesh, Axis.Y)
+    z_bnd_type = bnd_type_for_axis(mesh, Axis.Z)
 
     grid.cell_data["cell_sizes"] = mesh.cell_sizes
     grid.cell_data["cell_volume"] = np.prod(mesh.cell_sizes, axis=1)
@@ -465,16 +469,22 @@ if __name__ == "__main__":
     print(f"Mesh generation completed in {t1 - t0:.2f} seconds")
 
     # 4. メッシュサマリーの出力
-    num_cells = len(mesh.cell_centers)
-    num_x_faces = len(mesh.x_faces_owner)
-    num_y_faces = len(mesh.y_faces_owner)
-    num_z_faces = len(mesh.z_faces_owner)
-    num_x_bnd_minus = len(mesh.x_bnd_minus_owner)
-    num_x_bnd_plus = len(mesh.x_bnd_plus_owner)
-    num_y_bnd_minus = len(mesh.y_bnd_minus_owner)
-    num_y_bnd_plus = len(mesh.y_bnd_plus_owner)
-    num_z_bnd_minus = len(mesh.z_bnd_minus_owner)
-    num_z_bnd_plus = len(mesh.z_bnd_plus_owner)
+    if mesh.n_cells != len(mesh.cell_centers):
+        raise ValueError(
+            "n_cells does not match the number of cell centers"
+        )
+    num_cells = mesh.n_cells
+    ax = mesh.internal_faces_axis
+    num_x_faces = int(np.count_nonzero(ax == Axis.X))
+    num_y_faces = int(np.count_nonzero(ax == Axis.Y))
+    num_z_faces = int(np.count_nonzero(ax == Axis.Z))
+    bnd_dir = mesh.bnd_faces_dir
+    num_x_bnd_minus = int(np.count_nonzero(bnd_dir == Direction.XMinus))
+    num_x_bnd_plus = int(np.count_nonzero(bnd_dir == Direction.XPlus))
+    num_y_bnd_minus = int(np.count_nonzero(bnd_dir == Direction.YMinus))
+    num_y_bnd_plus = int(np.count_nonzero(bnd_dir == Direction.YPlus))
+    num_z_bnd_minus = int(np.count_nonzero(bnd_dir == Direction.ZMinus))
+    num_z_bnd_plus = int(np.count_nonzero(bnd_dir == Direction.ZPlus))
     print("\n=== Mesh Summary ===")
     print(f"Total Cells: {num_cells}")
     print(f"Total X Faces: {num_x_faces}")

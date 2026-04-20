@@ -6,11 +6,27 @@
 //! stencil. [`resolve_apibm_face`] merges both one-sided results into [`ApibmIntersection`].
 
 use crate::mesh::IBMMesh;
-use fluxel_core::neighbour::Direction;
-use fluxel_core::Forest;
+use fluxel_core::{Axis, Direction, Forest};
 use fluxel_geometry::Geometry;
 use parry3d_f64::math::{Pose, Vector};
 use parry3d_f64::query::{Ray, RayCast};
+
+trait ToVector {
+    fn to_vector(&self) -> Vector;
+}
+
+impl ToVector for Direction {
+    fn to_vector(&self) -> Vector {
+        match self {
+            Self::XMinus => Vector::new(-1.0, 0.0, 0.0),
+            Self::XPlus => Vector::new(1.0, 0.0, 0.0),
+            Self::YMinus => Vector::new(0.0, -1.0, 0.0),
+            Self::YPlus => Vector::new(0.0, 1.0, 0.0),
+            Self::ZMinus => Vector::new(0.0, 0.0, -1.0),
+            Self::ZPlus => Vector::new(0.0, 0.0, 1.0),
+        }
+    }
+}
 
 /// Full APIBM data for one owner–neighbour face: both ray hits and stencils on the shared axis.
 pub struct ApibmIntersection {
@@ -48,7 +64,7 @@ pub fn resolve_apibm_face(
     mesh: &IBMMesh,
     owner_global_id: usize,
     neighbour_global_id: usize,
-    axis: usize,
+    axis: Axis,
 ) -> Option<ApibmIntersection> {
     let owner_side = resolve_owner_to_neighbour(
         forest,
@@ -123,7 +139,7 @@ pub fn resolve_owner_to_neighbour(
     mesh: &IBMMesh,
     owner_global_id: usize,
     neighbour_global_id: usize,
-    axis: usize,
+    axis: Axis,
 ) -> Option<ApibmOneSideIntersection> {
     let o_logical = forest.keys()[owner_global_id].to_logical();
     let n_logical = forest.keys()[neighbour_global_id].to_logical();
@@ -131,11 +147,12 @@ pub fn resolve_owner_to_neighbour(
     let (c_o, s_o) = geom.cell_bounds(&o_logical);
     let (c_n, _) = geom.cell_bounds(&n_logical);
 
-    let mut dir_vec = Vector::new(0.0, 0.0, 0.0);
-    dir_vec[axis] = 1.0;
+    let ax = axis.as_index();
+    let (rev_dir, fwd_dir) = axis.split_into_directions();
+    let dir_vec = fwd_dir.to_vector();
 
     let center_o = Vector::new(c_o[0], c_o[1], c_o[2]);
-    let max_dist = (c_n[axis] - c_o[axis]).abs();
+    let max_dist = (c_n[ax] - c_o[ax]).abs();
 
     let ray = Ray::new(center_o, dir_vec);
     let num_triangles = mesh.bvh.indices().len();
@@ -148,21 +165,14 @@ pub fn resolve_owner_to_neighbour(
         let bnd_anchor_id = intersection.feature.unwrap_face() as usize % num_triangles;
         let dist_to_bnd = toi;
 
-        let rev_dir = match axis {
-            0 => Direction::XMinus,
-            1 => Direction::YMinus,
-            2 => Direction::ZMinus,
-            _ => unreachable!(),
-        };
         let owner_far_cells = forest.face_neighbour_global_ids(owner_global_id, rev_dir);
 
-        let mut rev_dir_vec = Vector::new(0.0, 0.0, 0.0);
-        rev_dir_vec[axis] = -1.0;
+        let rev_dir_vec = rev_dir.to_vector();
         let ray_rev = Ray::new(center_o, rev_dir_vec);
         let far_valid = !owner_far_cells.is_empty()
             && !mesh
                 .bvh
-                .intersects_ray(&Pose::identity(), &ray_rev, s_o[axis] * 1.5);
+                .intersects_ray(&Pose::identity(), &ray_rev, s_o[ax] * 1.5);
 
         let far_cell_id = if far_valid {
             owner_far_cells[0]
@@ -170,10 +180,10 @@ pub fn resolve_owner_to_neighbour(
             owner_global_id
         };
 
-        let x_o = c_o[axis];
+        let x_o = c_o[ax];
         let x_b = x_o + toi;
-        let x_o_far = x_o - s_o[axis];
-        let x_o_tgt = x_o + s_o[axis];
+        let x_o_far = x_o - s_o[ax];
+        let x_o_tgt = x_o + s_o[ax];
 
         let weights = calc_axis_weights(x_o_tgt, x_b, x_o, x_o_far, far_valid);
 
@@ -203,7 +213,7 @@ pub fn resolve_neighbour_to_owner(
     mesh: &IBMMesh,
     owner_global_id: usize,
     neighbour_global_id: usize,
-    axis: usize,
+    axis: Axis,
 ) -> Option<ApibmOneSideIntersection> {
     let o_logical = forest.keys()[owner_global_id].to_logical();
     let n_logical = forest.keys()[neighbour_global_id].to_logical();
@@ -211,11 +221,12 @@ pub fn resolve_neighbour_to_owner(
     let (c_o, _) = geom.cell_bounds(&o_logical);
     let (c_n, s_n) = geom.cell_bounds(&n_logical);
 
-    let mut dir_vec = Vector::new(0.0, 0.0, 0.0);
-    dir_vec[axis] = -1.0;
+    let ax = axis.as_index();
+    let (rev_dir, fwd_dir) = axis.split_into_directions();
+    let dir_vec = rev_dir.to_vector();
 
     let center_n = Vector::new(c_n[0], c_n[1], c_n[2]);
-    let max_dist = (c_o[axis] - c_n[axis]).abs();
+    let max_dist = (c_o[ax] - c_n[ax]).abs();
 
     let ray = Ray::new(center_n, dir_vec);
     let num_triangles = mesh.bvh.indices().len();
@@ -228,21 +239,14 @@ pub fn resolve_neighbour_to_owner(
         let bnd_anchor_id = intersection.feature.unwrap_face() as usize % num_triangles;
         let dist_to_bnd = toi;
 
-        let fwd_dir = match axis {
-            0 => Direction::XPlus,
-            1 => Direction::YPlus,
-            2 => Direction::ZPlus,
-            _ => unreachable!(),
-        };
         let neighbour_far_cells = forest.face_neighbour_global_ids(neighbour_global_id, fwd_dir);
 
-        let mut fwd_dir_vec = Vector::new(0.0, 0.0, 0.0);
-        fwd_dir_vec[axis] = 1.0;
+        let fwd_dir_vec = fwd_dir.to_vector();
         let ray_fwd = Ray::new(center_n, fwd_dir_vec);
         let far_valid = !neighbour_far_cells.is_empty()
             && !mesh
                 .bvh
-                .intersects_ray(&Pose::identity(), &ray_fwd, s_n[axis] * 1.5);
+                .intersects_ray(&Pose::identity(), &ray_fwd, s_n[ax] * 1.5);
 
         let far_cell_id = if far_valid {
             neighbour_far_cells[0]
@@ -250,10 +254,10 @@ pub fn resolve_neighbour_to_owner(
             neighbour_global_id
         };
 
-        let x_n = c_n[axis];
+        let x_n = c_n[ax];
         let x_b = x_n - toi;
-        let x_n_far = x_n + s_n[axis];
-        let x_n_tgt = x_n - s_n[axis];
+        let x_n_far = x_n + s_n[ax];
+        let x_n_tgt = x_n - s_n[ax];
 
         let weights = calc_axis_weights(x_n_tgt, x_b, x_n, x_n_far, far_valid);
 

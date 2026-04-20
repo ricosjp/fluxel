@@ -1,0 +1,74 @@
+variables:
+  PYTHON_VERSION: "3.12"
+  BASE_LAYER: bookworm-slim
+  # GitLab CI creates a separate mountpoint for the build directory,
+  # so we need to copy instead of using hard links.
+  UV_LINK_MODE: copy
+
+stages:
+  - test
+  - deploy
+
+default:
+  image: astral/uv:python${PYTHON_VERSION}-${BASE_LAYER}
+  before_script:
+    - apt update
+    - apt install -y build-essential curl
+    - curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+    - source ~/.cargo/env
+    - cargo install cargo-nextest cargo-llvm-cov
+    - make dev-install
+
+lint:
+  stage: test
+  script:
+    - make lint
+  tags:
+    - no-gpu
+
+pytest:
+  stage: test
+  script:
+    - make test
+  tags:
+    - no-gpu
+    - GenuineIntel
+
+
+
+# -----------------------------------------------------------------------------
+# deploy stage
+# -----------------------------------------------------------------------------
+
+# pages:
+#   stage: deploy
+#   before_script:
+#     - apt-get update -qq && apt-get install -y -qq make git xvfb
+#     - uv sync --group docs --extra cpu
+#   script:
+#     - xvfb-run make document
+#     - mkdir public
+#     - mv docs/build/* public/
+#   artifacts:
+#     paths:
+#       - public
+#   only:
+#     - main
+#     - develop
+#     - docs/sphinx-update
+#     - update/v0.1
+
+# .deploy:wheel:
+#   stage: deploy
+#   script:
+#     - uv version $VERSION
+#     - uv build
+#     - uv publish --username __token__ --password $PYPI_PUBLISH_TOKEN -n -v
+
+# deploy:wheel:tags:
+#   image: astral/uv:python$PYTHON_VERSION-$BASE_LAYER
+#   extends: .deploy:wheel
+#   before_script:
+#     - export VERSION=$CI_COMMIT_REF_NAME
+#   only:
+#     - tags

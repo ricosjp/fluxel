@@ -4,22 +4,12 @@ use super::classify::check_inside_parity_robust;
 use super::locate::get_global_id_from_phys;
 use crate::mesh::IBMMesh;
 use crate::types::{CellType, GhostCellData};
-use fluxel_core::neighbour::Direction;
-use fluxel_core::Forest;
+use fluxel_core::{Direction, Forest};
 use fluxel_geometry::Geometry;
 use nalgebra::{Matrix4, Vector4};
 use parry3d_f64::math::{Pose, Vector};
 use parry3d_f64::query::PointQuery;
 use rayon::prelude::*;
-
-const NEIGHBOUR_DIRS: [Direction; 6] = [
-    Direction::XMinus,
-    Direction::XPlus,
-    Direction::YMinus,
-    Direction::YPlus,
-    Direction::ZMinus,
-    Direction::ZPlus,
-];
 
 #[inline]
 fn fluid_cell_from_phys(
@@ -57,8 +47,9 @@ fn try_build_ghost_stencil_row(
         return None;
     }
 
-    let touches_fluid = NEIGHBOUR_DIRS.iter().any(|&dir| {
-        forest.face_neighbour_global_ids(global_id, dir)
+    let touches_fluid = Direction::ALL.iter().any(|&dir| {
+        forest
+            .face_neighbour_global_ids(global_id, dir)
             .iter()
             .any(|&nbr_id| gc_is_fluid[nbr_id])
     });

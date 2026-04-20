@@ -2,8 +2,7 @@
 
 use super::locate::get_global_id_from_phys;
 use crate::types::CellType;
-use fluxel_core::neighbour::Direction;
-use fluxel_core::Forest;
+use fluxel_core::{Direction, Forest};
 use fluxel_geometry::Geometry;
 use std::collections::VecDeque;
 
@@ -30,14 +29,6 @@ pub fn flood_fill_inside_outside(
             }
         });
 
-    let dirs = [
-        Direction::XMinus,
-        Direction::XPlus,
-        Direction::YMinus,
-        Direction::YPlus,
-        Direction::ZMinus,
-        Direction::ZPlus,
-    ];
     let seed_pt = fluid_seed_point;
 
     if let Some(seed_id) = get_global_id_from_phys(forest, geom, seed_pt) {
@@ -51,7 +42,7 @@ pub fn flood_fill_inside_outside(
         cell_types[seed_id] = CellType::Fluid;
 
         while let Some(curr_id) = queue.pop_front() {
-            for &dir in &dirs {
+            for dir in Direction::ALL {
                 let nbrs = forest.face_neighbour_global_ids(curr_id, dir);
                 for nbr_id in nbrs {
                     if !visited[nbr_id] {

@@ -32,6 +32,11 @@ class CfdGhostCellMesh:
 
     Attributes
     ----------
+    n_cells : int
+        The number of cells in the mesh.
+    coordinate_type : int
+        The type of coordinate system used in the mesh.
+        0: Cartesian
     cell_centers : numpy.ndarray
         Array of shape (N_cells, 3) dtype=float64
         the physical center coordinates of each background cell.
@@ -39,31 +44,23 @@ class CfdGhostCellMesh:
         Array of shape (N_cells, 3) dtype=float64
         the cell side lengths [dx, dy, dz] for each background cell.
 
-    [X Axis Topology]
-    x_faces_owner : numpy.ndarray
-        Array of shape (Nx_faces,) dtype=uint64
-        the owner cell index for internal faces along the X-axis.
-    x_faces_neighbour : numpy.ndarray
-        Array of shape (Nx_faces,) dtype=uint64
-        the neighbour cell index for internal faces along the X-axis.
-    x_bnd_minus_owner : numpy.ndarray
-        Array of shape (Nx_bnd_minus,) dtype=uint64
-        the owner cell index for domain boundary faces pointing in the -X.
-    x_bnd_plus_owner : numpy.ndarray
-        Array of shape (Nx_bnd_plus,) dtype=uint64
-        the owner cell index for domain boundary faces pointing in the +X.
-
-    [Y Axis Topology]
-    y_faces_owner : numpy.ndarray
-    y_faces_neighbour : numpy.ndarray
-    y_bnd_minus_owner : numpy.ndarray
-    y_bnd_plus_owner : numpy.ndarray
-
-    [Z Axis Topology]
-    z_faces_owner : numpy.ndarray
-    z_faces_neighbour : numpy.ndarray
-    z_bnd_minus_owner : numpy.ndarray
-    z_bnd_plus_owner : numpy.ndarray
+    internal_faces_owner : numpy.ndarray
+        Array of shape (N_internal_faces,) dtype=uint64
+        the owner cell index for internal faces.
+    internal_faces_neighbour : numpy.ndarray
+        Array of shape (N_internal_faces,) dtype=uint64
+        the neighbour cell index for internal faces.
+    internal_faces_axis : numpy.ndarray
+        Array of shape (N_internal_faces,) dtype=uint8
+        the axis of the internal faces.
+        0: X, 1: Y, 2: Z
+    bnd_faces_owner : numpy.ndarray
+        Array of shape (N_bnd_faces,) dtype=uint64
+        the owner cell index for domain boundary faces.
+    bnd_faces_dir : numpy.ndarray
+        Array of shape (N_bnd_faces,) dtype=uint8
+        the direction of the domain boundary faces.
+        0: -X, 1: +X, 2: -Y, 3: +Y, 4: -Z, 5: +Z
 
     [Ghost Cell IBM Specific Data]
     gc_is_fluid : numpy.ndarray
@@ -90,23 +87,16 @@ class CfdGhostCellMesh:
         the interpolation weights corresponding to `interp_stencil_indices`.
     """
 
+    n_cells: int
+    coordinate_type: int
     cell_centers: np.ndarray
     cell_sizes: np.ndarray
 
-    x_faces_owner: np.ndarray
-    x_faces_neighbour: np.ndarray
-    x_bnd_minus_owner: np.ndarray
-    x_bnd_plus_owner: np.ndarray
-
-    y_faces_owner: np.ndarray
-    y_faces_neighbour: np.ndarray
-    y_bnd_minus_owner: np.ndarray
-    y_bnd_plus_owner: np.ndarray
-
-    z_faces_owner: np.ndarray
-    z_faces_neighbour: np.ndarray
-    z_bnd_minus_owner: np.ndarray
-    z_bnd_plus_owner: np.ndarray
+    internal_faces_owner: np.ndarray
+    internal_faces_neighbour: np.ndarray
+    internal_faces_axis: np.ndarray
+    bnd_faces_owner: np.ndarray
+    bnd_faces_dir: np.ndarray
 
     gc_is_fluid: np.ndarray
     gc_cell_ids: np.ndarray
@@ -124,6 +114,11 @@ class CfdAxisProjectedMesh:
 
     Attributes
     ----------
+    n_cells: int
+        The number of cells in the mesh.
+    coordinate_type: int
+        The type of coordinate system used in the mesh.
+        0: Cartesian
     cell_centers : numpy.ndarray
         Array of shape (N_cells, 3) dtype=float64
         the physical center coordinates of each background cell.
@@ -131,180 +126,80 @@ class CfdAxisProjectedMesh:
         Array of shape (N_cells, 3) dtype=float64
         the cell side lengths [dx, dy, dz] for each background cell.
 
-    [X Axis Topology]
-    x_faces_owner : numpy.ndarray
-        Array of shape (Nx_faces,) dtype=uint64
-        the owner cell index for internal faces along the X-axis.
-    x_faces_neighbour : numpy.ndarray
-        Array of shape (Nx_faces,) dtype=uint64
-        the neighbour cell index for internal faces along the X-axis.
-    x_bnd_minus_owner : numpy.ndarray
-        Array of shape (Nx_bnd_minus,) dtype=uint64
-        the owner cell index for domain boundary faces pointing in the -X.
-    x_bnd_plus_owner : numpy.ndarray
-        Array of shape (Nx_bnd_plus,) dtype=uint64
-        the owner cell index for domain boundary faces pointing in the +X.
-
-    [Y Axis Topology]
-    y_faces_owner : numpy.ndarray
-    y_faces_neighbour : numpy.ndarray
-    y_bnd_minus_owner : numpy.ndarray
-    y_bnd_plus_owner : numpy.ndarray
-
-    [Z Axis Topology]
-    z_faces_owner : numpy.ndarray
-    z_faces_neighbour : numpy.ndarray
-    z_bnd_minus_owner : numpy.ndarray
-    z_bnd_plus_owner : numpy.ndarray
+    internal_faces_owner : numpy.ndarray
+        Array of shape (N_internal_faces,) dtype=uint64
+        the owner cell index for internal faces.
+    internal_faces_neighbour : numpy.ndarray
+        Array of shape (N_internal_faces,) dtype=uint64
+        the neighbour cell index for internal faces.
+    internal_faces_axis : numpy.ndarray
+        Array of shape (N_internal_faces,) dtype=uint8
+        the axis of the internal faces.
+        0: X, 1: Y, 2: Z
+    bnd_faces_owner : numpy.ndarray
+        Array of shape (N_bnd_faces,) dtype=uint64
+        the owner cell index for domain boundary faces.
+    bnd_faces_dir : numpy.ndarray
+        Array of shape (N_bnd_faces,) dtype=uint8
+        the direction of the domain boundary faces.
+        0: -X, 1: +X, 2: -Y, 3: +Y, 4: -Z, 5: +Z
 
     [Axis-Projected IBM Specific Data]
-    ap_x_has_bnd : numpy.ndarray
-        Array of shape (Nx_faces,) dtype=bool
+    ap_has_bnd : numpy.ndarray
+        Array of shape (N_internal_faces,) dtype=bool
         a boolean flag indicating
-        whether each internal X-face intersects the immersed boundary.
-    ap_x_dist_owner_to_bnd : numpy.ndarray
-        Array of shape (Nx_faces_with_bnd,) dtype=float64
+        whether each internal face intersects the immersed boundary.
+    ap_dist_owner_to_bnd : numpy.ndarray
+        Array of shape (N_internal_faces,) dtype=float64
         the distance from the owner cell center
-        to the boundary intersection point along X.
-    ap_x_dist_neighbour_to_bnd : numpy.ndarray
-        Array of shape (Nx_faces_with_bnd,) dtype=float64
+        to the boundary intersection point along each axis.
+    ap_dist_neighbour_to_bnd : numpy.ndarray
+        Array of shape (N_internal_faces,) dtype=float64
         the distance from the neighbour cell center
-        to the boundary intersection point along X.
-    ap_x_owner_far_cell_id : numpy.ndarray
-        Array of shape (Nx_faces_with_bnd,) dtype=uint64
+        to the boundary intersection point along each axis.
+    ap_owner_far_cell_id : numpy.ndarray
+        Array of shape (N_internal_faces,) dtype=uint64
         the far-cell index on the owner side
-        used for APIBM reconstruction along X.
-    ap_x_neighbour_far_cell_id : numpy.ndarray
-        Array of shape (Nx_faces_with_bnd,) dtype=uint64
+        used for APIBM reconstruction along each axis.
+    ap_neighbour_far_cell_id : numpy.ndarray
+        Array of shape (N_internal_faces,) dtype=uint64
         the far-cell index on the neighbour side
-        used for APIBM reconstruction along X.
-    ap_x_owner_weights : numpy.ndarray
+        used for APIBM reconstruction along each axis.
+    ap_owner_weights : numpy.ndarray
         Array of shape (Nx_faces_with_bnd, 3) dtype=float64
-        APIBM reconstruction weights for the owner side on X-faces.
-    ap_x_neighbour_weights : numpy.ndarray
-        Array of shape (Nx_faces_with_bnd, 3) dtype=float64
-        APIBM reconstruction weights for the neighbour side on X-faces.
-    ap_x_owner_bnd_anchor_id : numpy.ndarray
-        Array of shape (Nx_faces_with_bnd,) dtype=uint64
-        the boundary anchor id for owner side of X-faces.
-    ap_x_neighbour_bnd_anchor_id : numpy.ndarray
-        Array of shape (Nx_faces_with_bnd,) dtype=uint64
-        the boundary anchor id for neighbour side of X-faces.
+        APIBM reconstruction weights for the owner side on each axis.
+    ap_neighbour_weights : numpy.ndarray
+        Array of shape (N_internal_faces, 3) dtype=float64
+        APIBM reconstruction weights for the neighbour side on each axis.
+    ap_owner_bnd_anchor_id : numpy.ndarray
+        Array of shape (N_internal_faces,) dtype=uint64
+        the boundary anchor id for owner side of each axis.
+    ap_neighbour_bnd_anchor_id : numpy.ndarray
+        Array of shape (N_internal_faces,) dtype=uint64
+        the boundary anchor id for neighbour side of each axis.
 
-    ap_y_has_bnd : numpy.ndarray
-        Array of shape (Ny_faces,) dtype=bool
-        a boolean flag indicating
-        whether each internal Y-face intersects the immersed boundary.
-    ap_y_dist_owner_to_bnd : numpy.ndarray
-        Array of shape (Ny_faces_with_bnd,) dtype=float64
-        the distance from the owner cell center
-        to the boundary intersection point along Y.
-    ap_y_dist_neighbour_to_bnd : numpy.ndarray
-        Array of shape (Ny_faces_with_bnd,) dtype=float64
-        the distance from the neighbour cell center
-        to the boundary intersection point along Y.
-    ap_y_owner_far_cell_id : numpy.ndarray
-        Array of shape (Ny_faces_with_bnd,) dtype=uint64
-        the far-cell index on the owner side
-        used for APIBM reconstruction along Y.
-    ap_y_neighbour_far_cell_id : numpy.ndarray
-        Array of shape (Ny_faces_with_bnd,) dtype=uint64
-        the far-cell index on the neighbour side
-        used for APIBM reconstruction along Y.
-    ap_y_owner_weights : numpy.ndarray
-        Array of shape (Ny_faces_with_bnd, 3) dtype=float64
-        APIBM reconstruction weights for the owner side on Y-faces.
-    ap_y_neighbour_weights : numpy.ndarray
-        Array of shape (Ny_faces_with_bnd, 3) dtype=float64
-        APIBM reconstruction weights for the neighbour side on Y-faces.
-    ap_y_owner_bnd_anchor_id : numpy.ndarray
-        Array of shape (Ny_faces_with_bnd,) dtype=uint64
-        the boundary anchor id for owner side of Y-faces.
-    ap_y_neighbour_bnd_anchor_id : numpy.ndarray
-        Array of shape (Ny_faces_with_bnd,) dtype=uint64
-        the boundary anchor id for neighbour side of Y-faces.
-
-    ap_z_has_bnd : numpy.ndarray
-        Array of shape (Nz_faces,) dtype=bool
-        a boolean flag indicating
-        whether each internal Z-face intersects the immersed boundary.
-    ap_z_dist_owner_to_bnd : numpy.ndarray
-        Array of shape (Nz_faces_with_bnd,) dtype=float64
-        the distance from the owner cell center
-        to the boundary intersection point along Z.
-    ap_z_dist_neighbour_to_bnd : numpy.ndarray
-        Array of shape (Nz_faces_with_bnd,) dtype=float64
-        the distance from the neighbour cell center
-        to the boundary intersection point along Z.
-    ap_z_owner_far_cell_id : numpy.ndarray
-        Array of shape (Nz_faces_with_bnd,) dtype=uint64
-        the far-cell index on the owner side
-        used for APIBM reconstruction along Z.
-    ap_z_neighbour_far_cell_id : numpy.ndarray
-        Array of shape (Nz_faces_with_bnd,) dtype=uint64
-        the far-cell index on the neighbour side
-        used for APIBM reconstruction along Z.
-    ap_z_owner_weights : numpy.ndarray
-        Array of shape (Nz_faces_with_bnd, 3) dtype=float64
-        APIBM reconstruction weights for the owner side on Z-faces.
-    ap_z_neighbour_weights : numpy.ndarray
-        Array of shape (Nz_faces_with_bnd, 3) dtype=float64
-        APIBM reconstruction weights for the neighbour side on Z-faces.
-    ap_z_owner_bnd_anchor_id : numpy.ndarray
-        Array of shape (Nz_faces_with_bnd,) dtype=uint64
-        the boundary anchor id for owner side of Z-faces.
-    ap_z_neighbour_bnd_anchor_id : numpy.ndarray
-        Array of shape (Nz_faces_with_bnd,) dtype=uint64
-        the boundary anchor id for neighbour side of Z-faces.
     """
 
+    n_cells: int
+    coordinate_type: int
     cell_centers: np.ndarray
     cell_sizes: np.ndarray
 
-    x_faces_owner: np.ndarray
-    x_faces_neighbour: np.ndarray
-    x_bnd_minus_owner: np.ndarray
-    x_bnd_plus_owner: np.ndarray
+    internal_faces_owner: np.ndarray
+    internal_faces_neighbour: np.ndarray
+    internal_faces_axis: np.ndarray
+    bnd_faces_owner: np.ndarray
+    bnd_faces_dir: np.ndarray
 
-    y_faces_owner: np.ndarray
-    y_faces_neighbour: np.ndarray
-    y_bnd_minus_owner: np.ndarray
-    y_bnd_plus_owner: np.ndarray
-
-    z_faces_owner: np.ndarray
-    z_faces_neighbour: np.ndarray
-    z_bnd_minus_owner: np.ndarray
-    z_bnd_plus_owner: np.ndarray
-
-    ap_x_has_bnd: np.ndarray
-    ap_x_dist_owner_to_bnd: np.ndarray
-    ap_x_dist_neighbour_to_bnd: np.ndarray
-    ap_x_owner_far_cell_id: np.ndarray
-    ap_x_neighbour_far_cell_id: np.ndarray
-    ap_x_owner_weights: np.ndarray
-    ap_x_neighbour_weights: np.ndarray
-    ap_x_owner_bnd_anchor_id: np.ndarray
-    ap_x_neighbour_bnd_anchor_id: np.ndarray
-
-    ap_y_has_bnd: np.ndarray
-    ap_y_dist_owner_to_bnd: np.ndarray
-    ap_y_dist_neighbour_to_bnd: np.ndarray
-    ap_y_owner_far_cell_id: np.ndarray
-    ap_y_neighbour_far_cell_id: np.ndarray
-    ap_y_owner_weights: np.ndarray
-    ap_y_neighbour_weights: np.ndarray
-    ap_y_owner_bnd_anchor_id: np.ndarray
-    ap_y_neighbour_bnd_anchor_id: np.ndarray
-
-    ap_z_has_bnd: np.ndarray
-    ap_z_dist_owner_to_bnd: np.ndarray
-    ap_z_dist_neighbour_to_bnd: np.ndarray
-    ap_z_owner_far_cell_id: np.ndarray
-    ap_z_neighbour_far_cell_id: np.ndarray
-    ap_z_owner_weights: np.ndarray
-    ap_z_neighbour_weights: np.ndarray
-    ap_z_owner_bnd_anchor_id: np.ndarray
-    ap_z_neighbour_bnd_anchor_id: np.ndarray
+    ap_has_bnd: np.ndarray
+    ap_dist_owner_to_bnd: np.ndarray
+    ap_dist_neighbour_to_bnd: np.ndarray
+    ap_owner_far_cell_id: np.ndarray
+    ap_neighbour_far_cell_id: np.ndarray
+    ap_owner_weights: np.ndarray
+    ap_neighbour_weights: np.ndarray
+    ap_owner_bnd_anchor_id: np.ndarray
+    ap_neighbour_bnd_anchor_id: np.ndarray
 
 class FluxelManager:
     """

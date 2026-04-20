@@ -19,7 +19,7 @@ lint:
 
 .PHONY: test
 test:
-	cargo nextest run
+	cargo llvm-cov nextest
 
 # # For headless CI: install xvfb and run ``xvfb-run make document``.
 # .PHONY: document

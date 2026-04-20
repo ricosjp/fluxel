@@ -1,18 +1,8 @@
 //! Face-adjacent neighbours and multi-block coordinate wrapping.
 
 use crate::forest::Forest;
+use crate::Direction;
 use fluxel_sfc::{Key, MAX_LEVEL};
-
-/// One of the six axis-aligned face directions between octree cells.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Direction {
-    XMinus,
-    XPlus,
-    YMinus,
-    YPlus,
-    ZMinus,
-    ZPlus,
-}
 
 impl Forest {
     /// Maps global logical coordinates to `(tree_id, local x, y, z)` when crossing tree bounds.

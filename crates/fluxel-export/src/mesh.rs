@@ -1,32 +1,26 @@
 //! CFD-oriented mesh data structures for export.
-//! Uses an **axis-split** layout: interior faces are registered only along axis
-//! directions from each cell. Face normals and areas can be derived from the axis when needed,
-//! reducing memory compared to a full face list with explicit normals.
+//! Interior faces are stored in a **combined** list with an explicit per-face axis tag
+//! (`internal_faces_axis`). Domain boundary faces use `bnd_faces_dir` (six canonical directions).
+//! Face normals and areas can be derived from the axis when needed.
+
+use fluxel_core::{Axis, CoordinateType, Direction};
 
 /// SoA mesh layout for GCIBM (Ghost-Cell Immersed Boundary Method).
 #[derive(Debug, Default, Clone)]
 pub struct CfdGhostCellMesh {
     // --- Base topology (shared) ---
+    pub n_cells: usize,
+    pub coordinate_type: CoordinateType,
     pub cell_centers: Vec<[f64; 3]>,
     pub cell_sizes: Vec<[f64; 3]>,
 
-    // Topology along X
-    pub x_faces_owner: Vec<usize>,
-    pub x_faces_neighbour: Vec<usize>,
-    pub x_bnd_minus_owner: Vec<usize>,
-    pub x_bnd_plus_owner: Vec<usize>,
+    // --- Combined topology ---
+    pub internal_faces_owner: Vec<usize>,
+    pub internal_faces_neighbour: Vec<usize>,
+    pub internal_faces_axis: Vec<Axis>,
 
-    // Topology along Y
-    pub y_faces_owner: Vec<usize>,
-    pub y_faces_neighbour: Vec<usize>,
-    pub y_bnd_minus_owner: Vec<usize>,
-    pub y_bnd_plus_owner: Vec<usize>,
-
-    // Topology along Z
-    pub z_faces_owner: Vec<usize>,
-    pub z_faces_neighbour: Vec<usize>,
-    pub z_bnd_minus_owner: Vec<usize>,
-    pub z_bnd_plus_owner: Vec<usize>,
+    pub bnd_faces_owner: Vec<usize>,
+    pub bnd_faces_dir: Vec<Direction>,
 
     // --- GCIBM-specific fields ---
     /// Encoded cell category: `true` = Fluid, `false` = Solid.
@@ -48,58 +42,30 @@ pub struct CfdGhostCellMesh {
 }
 
 /// SoA mesh layout for APIBM (Axis-Projected Immersed Boundary Method).
-#[derive(Default, Debug, Clone)]
+#[derive(Debug, Default, Clone)]
 pub struct CfdAxisProjectedMesh {
     // --- Base topology (shared) ---
+    pub n_cells: usize,
+    pub coordinate_type: CoordinateType,
     pub cell_centers: Vec<[f64; 3]>,
     pub cell_sizes: Vec<[f64; 3]>,
 
-    // Topology along X
-    pub x_faces_owner: Vec<usize>,
-    pub x_faces_neighbour: Vec<usize>,
-    pub x_bnd_minus_owner: Vec<usize>,
-    pub x_bnd_plus_owner: Vec<usize>,
+    // --- Combined topology ---
+    pub internal_faces_owner: Vec<usize>,
+    pub internal_faces_neighbour: Vec<usize>,
+    pub internal_faces_axis: Vec<Axis>,
 
-    // Topology along Y
-    pub y_faces_owner: Vec<usize>,
-    pub y_faces_neighbour: Vec<usize>,
-    pub y_bnd_minus_owner: Vec<usize>,
-    pub y_bnd_plus_owner: Vec<usize>,
-
-    // Topology along Z
-    pub z_faces_owner: Vec<usize>,
-    pub z_faces_neighbour: Vec<usize>,
-    pub z_bnd_minus_owner: Vec<usize>,
-    pub z_bnd_plus_owner: Vec<usize>,
+    pub bnd_faces_owner: Vec<usize>,
+    pub bnd_faces_dir: Vec<Direction>,
 
     // --- APIBM-specific fields ---
-    pub ap_x_has_bnd: Vec<bool>,
-    pub ap_x_dist_owner_to_bnd: Vec<f64>,
-    pub ap_x_dist_neighbour_to_bnd: Vec<f64>,
-    pub ap_x_owner_far_cell_id: Vec<usize>,
-    pub ap_x_neighbour_far_cell_id: Vec<usize>,
-    pub ap_x_owner_weights: Vec<[f64; 3]>,
-    pub ap_x_neighbour_weights: Vec<[f64; 3]>,
-    pub ap_x_owner_bnd_anchor_id: Vec<usize>,
-    pub ap_x_neighbour_bnd_anchor_id: Vec<usize>,
-
-    pub ap_y_has_bnd: Vec<bool>,
-    pub ap_y_dist_owner_to_bnd: Vec<f64>,
-    pub ap_y_dist_neighbour_to_bnd: Vec<f64>,
-    pub ap_y_owner_far_cell_id: Vec<usize>,
-    pub ap_y_neighbour_far_cell_id: Vec<usize>,
-    pub ap_y_owner_weights: Vec<[f64; 3]>,
-    pub ap_y_neighbour_weights: Vec<[f64; 3]>,
-    pub ap_y_owner_bnd_anchor_id: Vec<usize>,
-    pub ap_y_neighbour_bnd_anchor_id: Vec<usize>,
-
-    pub ap_z_has_bnd: Vec<bool>,
-    pub ap_z_dist_owner_to_bnd: Vec<f64>,
-    pub ap_z_dist_neighbour_to_bnd: Vec<f64>,
-    pub ap_z_owner_far_cell_id: Vec<usize>,
-    pub ap_z_neighbour_far_cell_id: Vec<usize>,
-    pub ap_z_owner_weights: Vec<[f64; 3]>,
-    pub ap_z_neighbour_weights: Vec<[f64; 3]>,
-    pub ap_z_owner_bnd_anchor_id: Vec<usize>,
-    pub ap_z_neighbour_bnd_anchor_id: Vec<usize>,
+    pub ap_has_bnd: Vec<bool>,
+    pub ap_dist_owner_to_bnd: Vec<f64>,
+    pub ap_dist_neighbour_to_bnd: Vec<f64>,
+    pub ap_owner_far_cell_id: Vec<usize>,
+    pub ap_neighbour_far_cell_id: Vec<usize>,
+    pub ap_owner_weights: Vec<[f64; 3]>,
+    pub ap_neighbour_weights: Vec<[f64; 3]>,
+    pub ap_owner_bnd_anchor_id: Vec<usize>,
+    pub ap_neighbour_bnd_anchor_id: Vec<usize>,
 }
