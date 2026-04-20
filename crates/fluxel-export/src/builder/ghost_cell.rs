@@ -3,6 +3,7 @@
 use crate::mesh::CfdGhostCellMesh;
 use fluxel_core::{Axis, CoordinateType, Direction, Forest};
 use fluxel_geometry::Geometry;
+use fluxel_ibm::mesh::IBMMesh;
 use fluxel_ibm::types::GhostCellData;
 use rayon::prelude::*;
 
@@ -66,6 +67,7 @@ fn extract_ghost_cell_part(
 pub fn build_ghost_cell_mesh(
     forest: &Forest,
     geom: &Geometry,
+    ibm_mesh: &IBMMesh,
     gc_data: GhostCellData,
 ) -> CfdGhostCellMesh {
     let n_cells = forest.num_cells();
@@ -78,6 +80,7 @@ pub fn build_ghost_cell_mesh(
     let mut mesh = CfdGhostCellMesh {
         n_cells,
         coordinate_type: CoordinateType::Cartesian,
+        patch_names: ibm_mesh.patch_names.clone(),
         ..Default::default()
     };
 
@@ -99,6 +102,7 @@ pub fn build_ghost_cell_mesh(
 
     mesh.gc_cell_ids = gc_data.gc_cell_ids;
     mesh.gc_bnd_anchor_ids = gc_data.gc_bnd_anchor_ids;
+    mesh.gc_bnd_patch_ids = gc_data.gc_bnd_patch_ids;
     mesh.gc_bnd_intercepts = gc_data.gc_bnd_intercepts;
     mesh.gc_image_points = gc_data.gc_image_points;
     mesh.gc_interp_stencil_indices = gc_data.gc_interp_stencil_indices;

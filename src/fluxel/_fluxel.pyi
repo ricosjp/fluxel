@@ -43,6 +43,8 @@ class CfdGhostCellMesh:
     cell_sizes : numpy.ndarray
         Array of shape (N_cells, 3) dtype=float64
         the cell side lengths [dx, dy, dz] for each background cell.
+    patch_name_to_id : dict[str, int]
+        A dictionary mapping patch names to their corresponding IDs.
 
     internal_faces_owner : numpy.ndarray
         Array of shape (N_internal_faces,) dtype=uint64
@@ -73,6 +75,9 @@ class CfdGhostCellMesh:
     gc_bnd_anchor_ids : numpy.ndarray
         Array of shape (N_ghosts,) dtype=uint64
         the boundary triangle IDs associated with each ghost cell.
+    gc_bnd_patch_ids : numpy.ndarray
+        Array of shape (N_ghosts,) dtype=uint64
+        the boundary patch IDs associated with each ghost cell.
     gc_bnd_intercepts : numpy.ndarray
         Array of shape (N_ghosts, 3) dtype=float64
         the nearest boundary points.
@@ -91,6 +96,7 @@ class CfdGhostCellMesh:
     coordinate_type: int
     cell_centers: np.ndarray
     cell_sizes: np.ndarray
+    patch_name_to_id: dict[str, int]
 
     internal_faces_owner: np.ndarray
     internal_faces_neighbour: np.ndarray
@@ -101,6 +107,7 @@ class CfdGhostCellMesh:
     gc_is_fluid: np.ndarray
     gc_cell_ids: np.ndarray
     gc_bnd_anchor_ids: np.ndarray
+    gc_bnd_patch_ids: np.ndarray
     gc_bnd_intercepts: np.ndarray
     gc_image_points: np.ndarray
     gc_interp_stencil_indices: np.ndarray
@@ -125,6 +132,8 @@ class CfdAxisProjectedMesh:
     cell_sizes : numpy.ndarray
         Array of shape (N_cells, 3) dtype=float64
         the cell side lengths [dx, dy, dz] for each background cell.
+    patch_name_to_id: dict[str, int]
+        A dictionary mapping patch names to their corresponding IDs.
 
     internal_faces_owner : numpy.ndarray
         Array of shape (N_internal_faces,) dtype=uint64
@@ -174,16 +183,22 @@ class CfdAxisProjectedMesh:
     ap_owner_bnd_anchor_id : numpy.ndarray
         Array of shape (N_internal_faces,) dtype=uint64
         the boundary anchor id for owner side of each axis.
+    ap_owner_bnd_patch_id : numpy.ndarray
+        Array of shape (N_internal_faces,) dtype=uint64
+        the boundary patch id for owner side of each axis.
     ap_neighbour_bnd_anchor_id : numpy.ndarray
         Array of shape (N_internal_faces,) dtype=uint64
         the boundary anchor id for neighbour side of each axis.
-
+    ap_neighbour_bnd_patch_id : numpy.ndarray
+        Array of shape (N_internal_faces,) dtype=uint64
+        the boundary patch id for neighbour side of each axis.
     """
 
     n_cells: int
     coordinate_type: int
     cell_centers: np.ndarray
     cell_sizes: np.ndarray
+    patch_name_to_id: dict[str, int]
 
     internal_faces_owner: np.ndarray
     internal_faces_neighbour: np.ndarray
@@ -199,7 +214,9 @@ class CfdAxisProjectedMesh:
     ap_owner_weights: np.ndarray
     ap_neighbour_weights: np.ndarray
     ap_owner_bnd_anchor_id: np.ndarray
+    ap_owner_bnd_patch_id: np.ndarray
     ap_neighbour_bnd_anchor_id: np.ndarray
+    ap_neighbour_bnd_patch_id: np.ndarray
 
 class FluxelManager:
     """

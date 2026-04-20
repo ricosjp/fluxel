@@ -27,6 +27,7 @@ fn fluid_cell_from_phys(
 struct GhostStencilRow {
     cell_id: usize,
     bnd_anchor_id: usize,
+    bnd_patch_id: usize,
     bnd_intercept: [f64; 3],
     image_point: [f64; 3],
     stencil_indices: [usize; 8],
@@ -64,6 +65,7 @@ fn try_build_ghost_stencil_row(
     let (proj, feature) = mesh.bvh.project_point_and_get_feature(&identity, center);
     let closest_point = proj.point;
     let anchor_id = feature.unwrap_face() as usize;
+    let patch_id = mesh.anchor_to_patch_id[anchor_id];
 
     let image_point = Vector::new(
         2.0 * closest_point.x - center.x,
@@ -180,6 +182,7 @@ fn try_build_ghost_stencil_row(
     Some(GhostStencilRow {
         cell_id: global_id,
         bnd_anchor_id: anchor_id,
+        bnd_patch_id: patch_id,
         bnd_intercept: [closest_point.x, closest_point.y, closest_point.z],
         image_point: [image_point.x, image_point.y, image_point.z],
         stencil_indices,
@@ -240,6 +243,7 @@ pub fn compute_ghost_cell_geometry(
 
     let mut gc_cell_ids = Vec::new();
     let mut gc_bnd_anchor_ids = Vec::new();
+    let mut gc_bnd_patch_ids = Vec::new();
     let mut gc_bnd_intercepts = Vec::new();
     let mut gc_image_points = Vec::new();
     let mut gc_interp_stencil_indices = Vec::new();
@@ -248,6 +252,7 @@ pub fn compute_ghost_cell_geometry(
     for row in rows.into_iter().flatten() {
         gc_cell_ids.push(row.cell_id);
         gc_bnd_anchor_ids.push(row.bnd_anchor_id);
+        gc_bnd_patch_ids.push(row.bnd_patch_id);
         gc_bnd_intercepts.push(row.bnd_intercept);
         gc_image_points.push(row.image_point);
         gc_interp_stencil_indices.push(row.stencil_indices);
@@ -258,6 +263,7 @@ pub fn compute_ghost_cell_geometry(
         gc_is_fluid,
         gc_cell_ids,
         gc_bnd_anchor_ids,
+        gc_bnd_patch_ids,
         gc_bnd_intercepts,
         gc_image_points,
         gc_interp_stencil_indices,

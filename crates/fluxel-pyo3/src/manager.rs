@@ -1,7 +1,6 @@
 //! One-shot IBM mesh generation (`FluxelManager`).
 
 use crate::cfd_mesh::{BoundingBox, CfdAxisProjectedMesh, CfdGhostCellMesh};
-use crate::stl::load_stl;
 use fluxel_core::Forest as CoreForest;
 use fluxel_geometry::{BoundingBox as CoreBoundingBox, Geometry};
 use fluxel_ibm::{mesh::IBMMesh, solver, CellType};
@@ -21,18 +20,36 @@ impl FluxelManager {
     /// Shared preprocessing pipeline used by both GCIBM and APIBM mesh builders.
     fn prepare_forest_and_mesh(
         &self,
-        stl_path: &str,
+        mesh_path: &str,
         target_level: u8,
     ) -> PyResult<(CoreForest, Geometry, IBMMesh)> {
-        if !Path::new(stl_path).exists() {
+        let path = Path::new(mesh_path);
+        if !path.exists() {
             return Err(PyValueError::new_err(format!(
-                "STL file not found: {}",
-                stl_path
+                "Mesh file not found: {}",
+                mesh_path
             )));
         }
 
-        let (vertices, indices) = load_stl(stl_path)?;
-        let ibm_mesh = IBMMesh::from_vertices_and_indices(&vertices, &indices);
+        let ext = path
+            .extension()
+            .and_then(|e| e.to_str())
+            .map(|e| e.to_ascii_lowercase());
+        let ibm_mesh = match ext.as_deref() {
+            Some("stl") => IBMMesh::from_stl_file(path),
+            Some("obj") => IBMMesh::from_obj_file(path),
+            Some(other) => {
+                return Err(PyValueError::new_err(format!(
+                    "Unsupported mesh extension '.{other}'. Use .stl or .obj."
+                )));
+            }
+            None => {
+                return Err(PyValueError::new_err(
+                    "Mesh file has no extension. Use .stl or .obj.",
+                ));
+            }
+        }
+        .map_err(|e| PyValueError::new_err(e.to_string()))?;
 
         let geom = Geometry::new(self.core_bbox, self.base_res);
 
@@ -105,7 +122,8 @@ impl FluxelManager {
             fluid_seed_point,
         );
 
-        let core_mesh = fluxel_export::builder::build_ghost_cell_mesh(&forest, &geom, gc_data);
+        let core_mesh =
+            fluxel_export::builder::build_ghost_cell_mesh(&forest, &geom, &ibm_mesh, gc_data);
 
         Ok(CfdGhostCellMesh::from_core(py, core_mesh))
     }

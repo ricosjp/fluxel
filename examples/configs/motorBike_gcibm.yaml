@@ -1,0 +1,17 @@
+# GCIBM mesh export configuration for export_gcibm.py
+#
+# Paths are relative to the current working directory unless absolute.
+
+input_stl: "data/obj/motorBike.obj"
+output_vtu: "examples/output/gcibm/gcibm_motorBike.vtu"
+
+target_level: 4
+n_leaf_refinement: 3
+base_resolution: [10, 4, 4]
+
+bounding_box:
+  min: [-5.0, -4.0, 0.0]
+  max: [15.0, 4.0, 8.0]
+
+fluid_seed_point: [-4.0, 0.0, 2.0]
+

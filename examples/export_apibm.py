@@ -48,9 +48,13 @@ class ApibmExportConfig(BaseModel, frozen=True):
     @field_validator("input_stl", mode="after")
     @classmethod
     def _validate_input_stl(cls, v: pathlib.Path) -> pathlib.Path:
-        if v.suffix != ".stl":
-            raise ValueError(f"input_stl must be an STL file: {v}")
-        return v
+        match v.suffix:
+            case ".stl":
+                return v
+            case ".obj":
+                return v
+            case _:
+                raise ValueError(f"input_stl must be an STL or OBJ file: {v}")
 
     @field_validator("base_resolution", mode="after")
     @classmethod
@@ -178,6 +182,8 @@ def export_axis_projected_polylines(
     neighbour_weights: np.ndarray,
     owner_bnd_anchor_id: np.ndarray,
     neighbour_bnd_anchor_id: np.ndarray,
+    owner_bnd_patch_id: np.ndarray,
+    neighbour_bnd_patch_id: np.ndarray,
     output_prefix: str,
 ) -> None:
     """
@@ -191,6 +197,8 @@ def export_axis_projected_polylines(
     n_hit = int(np.sum(has_bnd))
     owner_bnd_anchor_id = owner_bnd_anchor_id
     neighbour_bnd_anchor_id = neighbour_bnd_anchor_id
+    owner_bnd_patch_id = owner_bnd_patch_id
+    neighbour_bnd_patch_id = neighbour_bnd_patch_id
     if n_hit != len(owner_bnd_anchor_id) or n_hit != len(
         neighbour_bnd_anchor_id
     ):
@@ -240,6 +248,9 @@ def export_axis_projected_polylines(
     anchor_per_polyline = np.concatenate(
         [owner_bnd_anchor_id, neighbour_bnd_anchor_id], axis=0
     )
+    patch_per_polyline = np.concatenate(
+        [owner_bnd_patch_id, neighbour_bnd_patch_id], axis=0
+    )
     # [F0, C0, B0, F1, C1, B1, ...]
     points = np.empty((n_faces_has_bnd * 3, 3), dtype=np.float64)
     points[0::3] = x_far
@@ -256,6 +267,7 @@ def export_axis_projected_polylines(
     pd.cell_data["side"] = sides
     pd.cell_data["weights"] = weights
     pd.cell_data["bnd_anchor_id"] = anchor_per_polyline
+    pd.cell_data["bnd_patch_id"] = patch_per_polyline
     pd.save(f"{output_prefix}_polylines_{axis}.vtp")
     print(f"Saved {axis} polylines to {output_prefix}_polylines_{axis}.vtp")
 
@@ -263,6 +275,8 @@ def export_axis_projected_polylines(
 def _axis_internal_mesh_slice(
     mesh: CfdAxisProjectedMesh, axis: Axis
 ) -> tuple[
+    np.ndarray,
+    np.ndarray,
     np.ndarray,
     np.ndarray,
     np.ndarray,
@@ -290,6 +304,8 @@ def _axis_internal_mesh_slice(
         mesh.ap_neighbour_weights[mask_for_n_has_bnd],
         mesh.ap_owner_bnd_anchor_id[mask_for_n_has_bnd],
         mesh.ap_neighbour_bnd_anchor_id[mask_for_n_has_bnd],
+        mesh.ap_owner_bnd_patch_id[mask_for_n_has_bnd],
+        mesh.ap_neighbour_bnd_patch_id[mask_for_n_has_bnd],
     )
 
 
@@ -322,6 +338,8 @@ def export_apibm_debug_data(
         ap_neighbour_weights=mesh.ap_neighbour_weights,
         ap_owner_bnd_anchor_id=mesh.ap_owner_bnd_anchor_id,
         ap_neighbour_bnd_anchor_id=mesh.ap_neighbour_bnd_anchor_id,
+        ap_owner_bnd_patch_id=mesh.ap_owner_bnd_patch_id,
+        ap_neighbour_bnd_patch_id=mesh.ap_neighbour_bnd_patch_id,
     )
     print(f"Saved debug arrays to {output_prefix}.npz")
     for axis_name, axis in (("x", Axis.X), ("y", Axis.Y), ("z", Axis.Z)):
@@ -337,6 +355,8 @@ def export_apibm_debug_data(
             nw,
             oba,
             nba,
+            obp,
+            nbp,
         ) = _axis_internal_mesh_slice(mesh, axis)
         export_axis_projected_polylines(
             axis=axis_name,
@@ -352,13 +372,18 @@ def export_apibm_debug_data(
             neighbour_weights=nw,
             owner_bnd_anchor_id=oba,
             neighbour_bnd_anchor_id=nba,
+            owner_bnd_patch_id=obp,
+            neighbour_bnd_patch_id=nbp,
             output_prefix=output_prefix,
         )
+
 
 def bnd_type_for_axis(mesh: CfdAxisProjectedMesh, axis: Axis) -> np.ndarray:
     mask_for_n_has_bnd = mesh.internal_faces_axis[mesh.ap_has_bnd] == axis.value
     # `==` binds looser than `&`; needs parentheses (otherwise compared to `axis & ap_has_bnd`).
-    mask_for_n_faces = (mesh.internal_faces_axis == axis.value) & mesh.ap_has_bnd
+    mask_for_n_faces = (
+        mesh.internal_faces_axis == axis.value
+    ) & mesh.ap_has_bnd
     bt = np.zeros(mesh.n_cells, dtype=int)
     of_m = mesh.ap_owner_far_cell_id[mask_for_n_has_bnd]
     nf_m = mesh.ap_neighbour_far_cell_id[mask_for_n_has_bnd]
@@ -470,9 +495,7 @@ if __name__ == "__main__":
 
     # 4. メッシュサマリーの出力
     if mesh.n_cells != len(mesh.cell_centers):
-        raise ValueError(
-            "n_cells does not match the number of cell centers"
-        )
+        raise ValueError("n_cells does not match the number of cell centers")
     num_cells = mesh.n_cells
     ax = mesh.internal_faces_axis
     num_x_faces = int(np.count_nonzero(ax == Axis.X))
@@ -496,6 +519,7 @@ if __name__ == "__main__":
     print(f"Total Y Boundary Plus: {num_y_bnd_plus}")
     print(f"Total Z Boundary Minus: {num_z_bnd_minus}")
     print(f"Total Z Boundary Plus: {num_z_bnd_plus}")
+    print(f"Patch Names: {list(mesh.patch_name_to_id.keys())}")
     print("====================")
 
     # 5. メッシュの保存

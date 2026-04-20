@@ -42,9 +42,13 @@ class GcibmExportConfig(BaseModel, frozen=True):
     @field_validator("input_stl", mode="after")
     @classmethod
     def _validate_input_stl(cls, v: pathlib.Path) -> pathlib.Path:
-        if v.suffix != ".stl":
-            raise ValueError(f"input_stl must be an STL file: {v}")
-        return v
+        match v.suffix:
+            case ".stl":
+                return v
+            case ".obj":
+                return v
+            case _:
+                raise ValueError(f"input_stl must be an STL or OBJ file: {v}")
 
     @field_validator("base_resolution", mode="after")
     @classmethod
@@ -179,21 +183,20 @@ def export_gcibm_debug_data(
     # Keep all raw debug arrays in a single compressed artifact.
     np.savez_compressed(
         f"{output_prefix}.npz",
-        gc_is_fluid=np.asarray(mesh.gc_is_fluid),
-        gc_cell_ids=np.asarray(mesh.gc_cell_ids),
-        gc_bnd_anchor_ids=np.asarray(mesh.gc_bnd_anchor_ids),
-        gc_bnd_intercepts=np.asarray(mesh.gc_bnd_intercepts),
-        gc_image_points=np.asarray(mesh.gc_image_points),
-        gc_interp_stencil_indices=np.asarray(mesh.gc_interp_stencil_indices),
-        gc_interp_stencil_weights=np.asarray(mesh.gc_interp_stencil_weights),
+        gc_is_fluid=mesh.gc_is_fluid,
+        gc_cell_ids=mesh.gc_cell_ids,
+        gc_bnd_anchor_ids=mesh.gc_bnd_anchor_ids,
+        gc_bnd_patch_ids=mesh.gc_bnd_patch_ids,
+        gc_bnd_intercepts=mesh.gc_bnd_intercepts,
+        gc_image_points=mesh.gc_image_points,
+        gc_interp_stencil_indices=mesh.gc_interp_stencil_indices,
+        gc_interp_stencil_weights=mesh.gc_interp_stencil_weights,
     )
     print(f"Saved debug arrays to {output_prefix}.npz")
 
-    gc_cell_ids = np.asarray(mesh.gc_cell_ids)
-    gc_bnd_anchor_ids = np.asarray(mesh.gc_bnd_anchor_ids)
-    centers = np.asarray(mesh.cell_centers)[gc_cell_ids]
-    intercepts = np.asarray(mesh.gc_bnd_intercepts)
-    image_points = np.asarray(mesh.gc_image_points)
+    centers =mesh.cell_centers[mesh.gc_cell_ids]
+    intercepts = mesh.gc_bnd_intercepts
+    image_points = mesh.gc_image_points
 
     if not (len(centers) == len(intercepts) == len(image_points)):
         raise ValueError(
@@ -201,7 +204,7 @@ def export_gcibm_debug_data(
             "len(gc_cell_ids) == len(gc_bnd_intercepts) == len(gc_image_points)"
         )
 
-    n_ghosts = len(gc_cell_ids)
+    n_ghosts = len(mesh.gc_cell_ids)
     if n_ghosts == 0:
         print("No ghost cells found; skipping polyline export.")
         return
@@ -220,8 +223,9 @@ def export_gcibm_debug_data(
 
     # Build PolyData with line cells only (avoid implicit vertex cells).
     pd = pv.PolyData(points, lines=lines.ravel())
-    pd.cell_data["gc_cell_id"] = gc_cell_ids
-    pd.cell_data["gc_bnd_anchor_id"] = gc_bnd_anchor_ids
+    pd.cell_data["gc_cell_id"] = mesh.gc_cell_ids
+    pd.cell_data["gc_bnd_anchor_id"] = mesh.gc_bnd_anchor_ids
+    pd.cell_data["gc_bnd_patch_id"] = mesh.gc_bnd_patch_ids
     pd.save(f"{output_prefix}.vtp")
     print(f"Saved ghost polylines to {output_prefix}.vtp")
 
@@ -322,11 +326,11 @@ if __name__ == "__main__":
 
     # 4. メッシュサマリーの出力
     num_cells = len(mesh.cell_centers)
-    axis = np.asarray(mesh.internal_faces_axis)
+    axis = mesh.internal_faces_axis
     num_x_faces = int(np.count_nonzero(axis == 0))
     num_y_faces = int(np.count_nonzero(axis == 1))
     num_z_faces = int(np.count_nonzero(axis == 2))
-    bnd_dir = np.asarray(mesh.bnd_faces_dir)
+    bnd_dir = mesh.bnd_faces_dir
     num_x_bnd_minus = int(np.count_nonzero(bnd_dir == 0))
     num_x_bnd_plus = int(np.count_nonzero(bnd_dir == 1))
     num_y_bnd_minus = int(np.count_nonzero(bnd_dir == 2))
@@ -346,6 +350,7 @@ if __name__ == "__main__":
     print(f"Total Z Boundary Minus: {num_z_bnd_minus}")
     print(f"Total Z Boundary Plus: {num_z_bnd_plus}")
     print(f"Total Ghost Cells: {num_ghosts}")
+    print(f"Patch Names: {list(mesh.patch_name_to_id.keys())}")
     print("====================")
 
     # 5. メッシュの保存

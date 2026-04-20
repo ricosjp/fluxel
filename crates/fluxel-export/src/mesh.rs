@@ -13,6 +13,7 @@ pub struct CfdGhostCellMesh {
     pub coordinate_type: CoordinateType,
     pub cell_centers: Vec<[f64; 3]>,
     pub cell_sizes: Vec<[f64; 3]>,
+    pub patch_names: Vec<String>,
 
     // --- Combined topology ---
     pub internal_faces_owner: Vec<usize>,
@@ -30,6 +31,8 @@ pub struct CfdGhostCellMesh {
     pub gc_cell_ids: Vec<usize>,
     /// Face anchor id for each ghost cell (length `N_ghost`).
     pub gc_bnd_anchor_ids: Vec<usize>,
+    /// Face patch id for each ghost cell (length `N_ghost`).
+    pub gc_bnd_patch_ids: Vec<usize>,
     /// Closest boundary point (intercept) per ghost cell (length `N_ghost`).
     pub gc_bnd_intercepts: Vec<[f64; 3]>,
     /// Image-point coordinates per ghost cell (length `N_ghost`).
@@ -49,6 +52,7 @@ pub struct CfdAxisProjectedMesh {
     pub coordinate_type: CoordinateType,
     pub cell_centers: Vec<[f64; 3]>,
     pub cell_sizes: Vec<[f64; 3]>,
+    pub patch_names: Vec<String>,
 
     // --- Combined topology ---
     pub internal_faces_owner: Vec<usize>,
@@ -67,5 +71,7 @@ pub struct CfdAxisProjectedMesh {
     pub ap_owner_weights: Vec<[f64; 3]>,
     pub ap_neighbour_weights: Vec<[f64; 3]>,
     pub ap_owner_bnd_anchor_id: Vec<usize>,
+    pub ap_owner_bnd_patch_id: Vec<usize>,
     pub ap_neighbour_bnd_anchor_id: Vec<usize>,
+    pub ap_neighbour_bnd_patch_id: Vec<usize>,
 }

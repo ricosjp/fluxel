@@ -5,6 +5,7 @@ use fluxel_export::CfdAxisProjectedMesh as CoreCfdAxisProjectedMesh;
 use fluxel_export::CfdGhostCellMesh as CoreCfdGhostCellMesh;
 use numpy::{PyArray1, PyArray2};
 use pyo3::prelude::*;
+use pyo3::types::PyDict;
 use pyo3::Py;
 
 /// Physical simulation domain bounds.
@@ -27,6 +28,7 @@ impl BoundingBox {
 pub struct CfdGhostCellMesh {
     pub n_cells: usize,
     pub coordinate_type: u8,
+    pub patch_name_to_id: Py<PyDict>,
 
     pub cell_centers: Py<PyArray2<f64>>,
     pub cell_sizes: Py<PyArray2<f64>>,
@@ -40,6 +42,7 @@ pub struct CfdGhostCellMesh {
     pub gc_is_fluid: Py<PyArray1<bool>>,
     pub gc_cell_ids: Py<PyArray1<usize>>,
     pub gc_bnd_anchor_ids: Py<PyArray1<usize>>,
+    pub gc_bnd_patch_ids: Py<PyArray1<usize>>,
     pub gc_bnd_intercepts: Py<PyArray2<f64>>,
     pub gc_image_points: Py<PyArray2<f64>>,
     pub gc_interp_stencil_indices: Py<PyArray2<usize>>,
@@ -48,9 +51,17 @@ pub struct CfdGhostCellMesh {
 
 impl CfdGhostCellMesh {
     pub fn from_core(py: Python<'_>, core_mesh: CoreCfdGhostCellMesh) -> Self {
+        let patch_name_to_id = PyDict::new(py);
+        for (index, patch_name) in core_mesh.patch_names.iter().enumerate() {
+            patch_name_to_id
+                .set_item(patch_name, index)
+                .expect("failed to set patch_name_to_id");
+        }
+
         Self {
             n_cells: core_mesh.n_cells,
             coordinate_type: core_mesh.coordinate_type as u8,
+            patch_name_to_id: patch_name_to_id.unbind(),
 
             cell_centers: vec_k_to_py2::<f64, 3>(py, core_mesh.cell_centers),
             cell_sizes: vec_k_to_py2::<f64, 3>(py, core_mesh.cell_sizes),
@@ -78,6 +89,7 @@ impl CfdGhostCellMesh {
             gc_is_fluid: vec_to_py1(py, core_mesh.gc_is_fluid),
             gc_cell_ids: vec_to_py1(py, core_mesh.gc_cell_ids),
             gc_bnd_anchor_ids: vec_to_py1(py, core_mesh.gc_bnd_anchor_ids),
+            gc_bnd_patch_ids: vec_to_py1(py, core_mesh.gc_bnd_patch_ids),
             gc_bnd_intercepts: vec_k_to_py2::<f64, 3>(py, core_mesh.gc_bnd_intercepts),
             gc_image_points: vec_k_to_py2::<f64, 3>(py, core_mesh.gc_image_points),
             gc_interp_stencil_indices: vec_k_to_py2::<usize, 8>(
@@ -97,6 +109,7 @@ impl CfdGhostCellMesh {
 pub struct CfdAxisProjectedMesh {
     pub n_cells: usize,
     pub coordinate_type: u8,
+    pub patch_name_to_id: Py<PyDict>,
 
     pub cell_centers: Py<PyArray2<f64>>,
     pub cell_sizes: Py<PyArray2<f64>>,
@@ -115,14 +128,24 @@ pub struct CfdAxisProjectedMesh {
     pub ap_owner_weights: Py<PyArray2<f64>>,
     pub ap_neighbour_weights: Py<PyArray2<f64>>,
     pub ap_owner_bnd_anchor_id: Py<PyArray1<usize>>,
+    pub ap_owner_bnd_patch_id: Py<PyArray1<usize>>,
     pub ap_neighbour_bnd_anchor_id: Py<PyArray1<usize>>,
+    pub ap_neighbour_bnd_patch_id: Py<PyArray1<usize>>,
 }
 
 impl CfdAxisProjectedMesh {
     pub fn from_core(py: Python<'_>, core_mesh: CoreCfdAxisProjectedMesh) -> Self {
+        let patch_name_to_id = PyDict::new(py);
+        for (index, patch_name) in core_mesh.patch_names.iter().enumerate() {
+            patch_name_to_id
+                .set_item(patch_name, index)
+                .expect("failed to set patch_name_to_id");
+        }
+
         Self {
             n_cells: core_mesh.n_cells,
             coordinate_type: core_mesh.coordinate_type as u8,
+            patch_name_to_id: patch_name_to_id.unbind(),
 
             cell_centers: vec_k_to_py2::<f64, 3>(py, core_mesh.cell_centers),
             cell_sizes: vec_k_to_py2::<f64, 3>(py, core_mesh.cell_sizes),
@@ -155,7 +178,9 @@ impl CfdAxisProjectedMesh {
             ap_owner_weights: vec_k_to_py2::<f64, 3>(py, core_mesh.ap_owner_weights),
             ap_neighbour_weights: vec_k_to_py2::<f64, 3>(py, core_mesh.ap_neighbour_weights),
             ap_owner_bnd_anchor_id: vec_to_py1(py, core_mesh.ap_owner_bnd_anchor_id),
+            ap_owner_bnd_patch_id: vec_to_py1(py, core_mesh.ap_owner_bnd_patch_id),
             ap_neighbour_bnd_anchor_id: vec_to_py1(py, core_mesh.ap_neighbour_bnd_anchor_id),
+            ap_neighbour_bnd_patch_id: vec_to_py1(py, core_mesh.ap_neighbour_bnd_patch_id),
         }
     }
 }

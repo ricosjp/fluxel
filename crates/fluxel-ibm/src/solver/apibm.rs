@@ -44,8 +44,12 @@ pub struct ApibmIntersection {
     pub neighbour_weights: [f64; 3],
     /// IBM surface triangle id for the hit resolved from the owner side.
     pub owner_bnd_anchor_id: usize,
+    /// IBM surface patch id for the hit resolved from the owner side.
+    pub owner_bnd_patch_id: usize,
     /// IBM surface triangle id for the hit resolved from the neighbour side.
     pub neighbour_bnd_anchor_id: usize,
+    /// IBM surface patch id for the hit resolved from the neighbour side.
+    pub neighbour_bnd_patch_id: usize,
 }
 
 /// Resolves APIBM on a face by combining one-sided ray casts from owner and neighbour.
@@ -91,7 +95,9 @@ pub fn resolve_apibm_face(
         owner_weights: owner_side.weights,
         neighbour_weights: neighbour_side.weights,
         owner_bnd_anchor_id: owner_side.bnd_anchor_id,
+        owner_bnd_patch_id: owner_side.bnd_patch_id,
         neighbour_bnd_anchor_id: neighbour_side.bnd_anchor_id,
+        neighbour_bnd_patch_id: neighbour_side.bnd_patch_id,
     })
 }
 
@@ -163,6 +169,7 @@ pub fn resolve_owner_to_neighbour(
     {
         let toi = intersection.time_of_impact;
         let bnd_anchor_id = intersection.feature.unwrap_face() as usize % num_triangles;
+        let bnd_patch_id = mesh.anchor_to_patch_id[bnd_anchor_id];
         let dist_to_bnd = toi;
 
         let owner_far_cells = forest.face_neighbour_global_ids(owner_global_id, rev_dir);
@@ -192,6 +199,7 @@ pub fn resolve_owner_to_neighbour(
             far_cell_id,
             weights,
             bnd_anchor_id,
+            bnd_patch_id,
         })
     } else {
         None
@@ -237,6 +245,7 @@ pub fn resolve_neighbour_to_owner(
     {
         let toi = intersection.time_of_impact;
         let bnd_anchor_id = intersection.feature.unwrap_face() as usize % num_triangles;
+        let bnd_patch_id = mesh.anchor_to_patch_id[bnd_anchor_id];
         let dist_to_bnd = toi;
 
         let neighbour_far_cells = forest.face_neighbour_global_ids(neighbour_global_id, fwd_dir);
@@ -266,6 +275,7 @@ pub fn resolve_neighbour_to_owner(
             far_cell_id,
             weights,
             bnd_anchor_id,
+            bnd_patch_id,
         })
     } else {
         None
@@ -282,4 +292,6 @@ pub struct ApibmOneSideIntersection {
     pub weights: [f64; 3],
     /// Hit IBM mesh triangle index (modulo triangle count).
     pub bnd_anchor_id: usize,
+    /// IBM surface patch id for the hit.
+    pub bnd_patch_id: usize,
 }

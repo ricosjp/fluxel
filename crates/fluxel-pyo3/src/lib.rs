@@ -7,7 +7,6 @@ mod cfd_mesh;
 mod conversion;
 mod forest;
 mod manager;
-mod stl;
 
 use pyo3::prelude::*;
 

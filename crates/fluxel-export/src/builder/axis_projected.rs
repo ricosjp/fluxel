@@ -27,7 +27,9 @@ struct AxisProjectedPart {
     ap_owner_weights: Vec<[f64; 3]>,
     ap_neighbour_weights: Vec<[f64; 3]>,
     ap_owner_bnd_anchor_id: Vec<usize>,
+    ap_owner_bnd_patch_id: Vec<usize>,
     ap_neighbour_bnd_anchor_id: Vec<usize>,
+    ap_neighbour_bnd_patch_id: Vec<usize>,
 }
 
 fn extract_axis_projected_part(
@@ -82,8 +84,11 @@ fn extract_axis_projected_part(
                     part.ap_owner_weights.push(ap.owner_weights);
                     part.ap_neighbour_weights.push(ap.neighbour_weights);
                     part.ap_owner_bnd_anchor_id.push(ap.owner_bnd_anchor_id);
+                    part.ap_owner_bnd_patch_id.push(ap.owner_bnd_patch_id);
                     part.ap_neighbour_bnd_anchor_id
                         .push(ap.neighbour_bnd_anchor_id);
+                    part.ap_neighbour_bnd_patch_id
+                        .push(ap.neighbour_bnd_patch_id);
                 } else {
                     part.ap_has_bnd.push(false);
                 }
@@ -112,6 +117,7 @@ pub fn build_axis_projected_mesh(
     let mut mesh = CfdAxisProjectedMesh {
         n_cells,
         coordinate_type: CoordinateType::Cartesian,
+        patch_names: ibm_mesh.patch_names.clone(),
         ..Default::default()
     };
 
@@ -137,8 +143,11 @@ pub fn build_axis_projected_mesh(
         mesh.ap_owner_weights.extend(p.ap_owner_weights);
         mesh.ap_neighbour_weights.extend(p.ap_neighbour_weights);
         mesh.ap_owner_bnd_anchor_id.extend(p.ap_owner_bnd_anchor_id);
+        mesh.ap_owner_bnd_patch_id.extend(p.ap_owner_bnd_patch_id);
         mesh.ap_neighbour_bnd_anchor_id
             .extend(p.ap_neighbour_bnd_anchor_id);
+        mesh.ap_neighbour_bnd_patch_id
+            .extend(p.ap_neighbour_bnd_patch_id);
     }
 
     mesh
