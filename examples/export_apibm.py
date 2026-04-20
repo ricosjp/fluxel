@@ -173,7 +173,7 @@ def export_axis_projected_polylines(
     cell_centers: np.ndarray,
     owner: np.ndarray,
     neighbour: np.ndarray,
-    has_bnd: np.ndarray,
+    is_immersed_face: np.ndarray,
     dist_owner_to_bnd: np.ndarray,
     dist_neighbour_to_bnd: np.ndarray,
     owner_far_cell_id: np.ndarray,
@@ -194,7 +194,7 @@ def export_axis_projected_polylines(
     first the owner-side stencil (Far_o, C_o, B),
     then the neighbour-side stencil (Far_n, C_n, B).
     """
-    n_hit = int(np.sum(has_bnd))
+    n_hit = int(np.sum(is_immersed_face))
     owner_bnd_anchor_id = owner_bnd_anchor_id
     neighbour_bnd_anchor_id = neighbour_bnd_anchor_id
     owner_bnd_patch_id = owner_bnd_patch_id
@@ -209,7 +209,7 @@ def export_axis_projected_polylines(
         )
     if n_hit != len(dist_owner_to_bnd) or n_hit != len(dist_neighbour_to_bnd):
         raise ValueError(
-            "dist_* and has_bnd selections must have consistent lengths"
+            "dist_* and is_immersed_face selections must have consistent lengths"
         )
     direction = np.array([0.0, 0.0, 0.0])
     match axis:
@@ -223,25 +223,25 @@ def export_axis_projected_polylines(
             raise ValueError(f"Invalid axis: {axis}")
 
     x_o_far = cell_centers[owner_far_cell_id]
-    x_o = cell_centers[owner[has_bnd]]
+    x_o = cell_centers[owner[is_immersed_face]]
     x_o_bnd = x_o + dist_owner_to_bnd[:, None] * direction[None, :]
 
     x_n_far = cell_centers[neighbour_far_cell_id]
-    x_n = cell_centers[neighbour[has_bnd]]
+    x_n = cell_centers[neighbour[is_immersed_face]]
     x_n_bnd = x_n - dist_neighbour_to_bnd[:, None] * direction[None, :]
 
-    n_owner_faces_has_bnd = len(x_o)
-    n_neighbour_faces_has_bnd = len(x_n)
-    if n_owner_faces_has_bnd != n_neighbour_faces_has_bnd:
+    n_owner_immersed_faces = len(x_o)
+    n_neighbour_immersed_faces = len(x_n)
+    if n_owner_immersed_faces != n_neighbour_immersed_faces:
         raise ValueError("owner and neighbour filtered face counts must match")
-    n_faces_has_bnd = n_owner_faces_has_bnd + n_neighbour_faces_has_bnd
+    n_immersed_faces = n_owner_immersed_faces + n_neighbour_immersed_faces
 
     x_far = np.concatenate([x_o_far, x_n_far], axis=0)
     x = np.concatenate([x_o, x_n], axis=0)
     x_bnd = np.concatenate([x_o_bnd, x_n_bnd], axis=0)
 
     sides = np.concatenate(
-        [np.zeros(n_owner_faces_has_bnd), np.ones(n_neighbour_faces_has_bnd)],
+        [np.zeros(n_owner_immersed_faces), np.ones(n_neighbour_immersed_faces)],
         axis=0,
     )
     weights = np.concatenate([owner_weights, neighbour_weights], axis=0)
@@ -252,15 +252,15 @@ def export_axis_projected_polylines(
         [owner_bnd_patch_id, neighbour_bnd_patch_id], axis=0
     )
     # [F0, C0, B0, F1, C1, B1, ...]
-    points = np.empty((n_faces_has_bnd * 3, 3), dtype=np.float64)
+    points = np.empty((n_immersed_faces * 3, 3), dtype=np.float64)
     points[0::3] = x_far
     points[1::3] = x
     points[2::3] = x_bnd
 
     # VTK polyline connectivity: [3, p0, p1, p2] repeated for each polyline.
-    lines = np.empty((n_faces_has_bnd, 4), dtype=np.int64)
+    lines = np.empty((n_immersed_faces, 4), dtype=np.int64)
     lines[:, 0] = 3
-    base = (np.arange(n_faces_has_bnd, dtype=np.int64) * 3).reshape(-1, 1)
+    base = (np.arange(n_immersed_faces, dtype=np.int64) * 3).reshape(-1, 1)
     lines[:, 1:] = base + np.array([0, 1, 2], dtype=np.int64)
 
     pd = pv.PolyData(points, lines=lines.ravel())
@@ -291,21 +291,21 @@ def _axis_internal_mesh_slice(
 ]:
     """Return per-axis interior-face arrays (same order as the Rust builder)."""
     mask_for_n_faces = mesh.internal_faces_axis == axis.value
-    mask_for_n_has_bnd = mesh.internal_faces_axis[mesh.ap_has_bnd] == axis.value
+    mask_for_n_immersed_faces = mesh.internal_faces_axis[mesh.ap_is_immersed_face] == axis.value
     return (
         mesh.internal_faces_owner[mask_for_n_faces],
         mesh.internal_faces_neighbour[mask_for_n_faces],
-        mesh.ap_has_bnd[mask_for_n_faces],
-        mesh.ap_dist_owner_to_bnd[mask_for_n_has_bnd],
-        mesh.ap_dist_neighbour_to_bnd[mask_for_n_has_bnd],
-        mesh.ap_owner_far_cell_id[mask_for_n_has_bnd],
-        mesh.ap_neighbour_far_cell_id[mask_for_n_has_bnd],
-        mesh.ap_owner_weights[mask_for_n_has_bnd],
-        mesh.ap_neighbour_weights[mask_for_n_has_bnd],
-        mesh.ap_owner_bnd_anchor_id[mask_for_n_has_bnd],
-        mesh.ap_neighbour_bnd_anchor_id[mask_for_n_has_bnd],
-        mesh.ap_owner_bnd_patch_id[mask_for_n_has_bnd],
-        mesh.ap_neighbour_bnd_patch_id[mask_for_n_has_bnd],
+        mesh.ap_is_immersed_face[mask_for_n_faces],
+        mesh.ap_dist_owner_to_bnd[mask_for_n_immersed_faces],
+        mesh.ap_dist_neighbour_to_bnd[mask_for_n_immersed_faces],
+        mesh.ap_owner_far_cell_id[mask_for_n_immersed_faces],
+        mesh.ap_neighbour_far_cell_id[mask_for_n_immersed_faces],
+        mesh.ap_owner_weights[mask_for_n_immersed_faces],
+        mesh.ap_neighbour_weights[mask_for_n_immersed_faces],
+        mesh.ap_owner_bnd_anchor_id[mask_for_n_immersed_faces],
+        mesh.ap_neighbour_bnd_anchor_id[mask_for_n_immersed_faces],
+        mesh.ap_owner_bnd_patch_id[mask_for_n_immersed_faces],
+        mesh.ap_neighbour_bnd_patch_id[mask_for_n_immersed_faces],
     )
 
 
@@ -329,7 +329,7 @@ def export_apibm_debug_data(
         internal_faces_axis=mesh.internal_faces_axis,
         bnd_faces_owner=mesh.bnd_faces_owner,
         bnd_faces_dir=mesh.bnd_faces_dir,
-        ap_has_bnd=mesh.ap_has_bnd,
+        ap_is_immersed_face=mesh.ap_is_immersed_face,
         ap_dist_owner_to_bnd=mesh.ap_dist_owner_to_bnd,
         ap_dist_neighbour_to_bnd=mesh.ap_dist_neighbour_to_bnd,
         ap_owner_far_cell_id=mesh.ap_owner_far_cell_id,
@@ -346,7 +346,7 @@ def export_apibm_debug_data(
         (
             owner,
             neighbour,
-            has_bnd,
+            is_immersed_face,
             dist_o,
             dist_n,
             ofar,
@@ -363,7 +363,7 @@ def export_apibm_debug_data(
             cell_centers=mesh.cell_centers,
             owner=owner,
             neighbour=neighbour,
-            has_bnd=has_bnd,
+            is_immersed_face=is_immersed_face,
             dist_owner_to_bnd=dist_o,
             dist_neighbour_to_bnd=dist_n,
             owner_far_cell_id=ofar,
@@ -379,14 +379,14 @@ def export_apibm_debug_data(
 
 
 def bnd_type_for_axis(mesh: CfdAxisProjectedMesh, axis: Axis) -> np.ndarray:
-    mask_for_n_has_bnd = mesh.internal_faces_axis[mesh.ap_has_bnd] == axis.value
-    # `==` binds looser than `&`; needs parentheses (otherwise compared to `axis & ap_has_bnd`).
+    mask_for_n_immersed_faces = mesh.internal_faces_axis[mesh.ap_is_immersed_face] == axis.value
+    # `==` binds looser than `&`; needs parentheses (otherwise compared to `axis & ap_is_immersed_face`).
     mask_for_n_faces = (
         mesh.internal_faces_axis == axis.value
-    ) & mesh.ap_has_bnd
+    ) & mesh.ap_is_immersed_face
     bt = np.zeros(mesh.n_cells, dtype=int)
-    of_m = mesh.ap_owner_far_cell_id[mask_for_n_has_bnd]
-    nf_m = mesh.ap_neighbour_far_cell_id[mask_for_n_has_bnd]
+    of_m = mesh.ap_owner_far_cell_id[mask_for_n_immersed_faces]
+    nf_m = mesh.ap_neighbour_far_cell_id[mask_for_n_immersed_faces]
     ow_m = mesh.internal_faces_owner[mask_for_n_faces]
     nb_m = mesh.internal_faces_neighbour[mask_for_n_faces]
     # Far stencil ids first, then owner/neighbour: same cell id can be both (Rust uses owner id

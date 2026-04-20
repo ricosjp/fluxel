@@ -63,7 +63,7 @@ pub struct CfdAxisProjectedMesh {
     pub bnd_faces_dir: Vec<Direction>,
 
     // --- APIBM-specific fields ---
-    pub ap_has_bnd: Vec<bool>,
+    pub ap_is_immersed_face: Vec<bool>,
     pub ap_dist_owner_to_bnd: Vec<f64>,
     pub ap_dist_neighbour_to_bnd: Vec<f64>,
     pub ap_owner_far_cell_id: Vec<usize>,

@@ -19,7 +19,7 @@ struct AxisProjectedPart {
     bnd_faces_owner: Vec<usize>,
     bnd_faces_dir: Vec<Direction>,
 
-    ap_has_bnd: Vec<bool>,
+    ap_is_immersed_face: Vec<bool>,
     ap_dist_owner_to_bnd: Vec<f64>,
     ap_dist_neighbour_to_bnd: Vec<f64>,
     ap_owner_far_cell_id: Vec<usize>,
@@ -76,7 +76,7 @@ fn extract_axis_projected_part(
                 };
 
                 if let Some(ap) = ap_res {
-                    part.ap_has_bnd.push(true);
+                    part.ap_is_immersed_face.push(true);
                     part.ap_dist_owner_to_bnd.push(ap.dist_owner_to_bnd);
                     part.ap_dist_neighbour_to_bnd.push(ap.dist_neighbour_to_bnd);
                     part.ap_owner_far_cell_id.push(ap.owner_far_cell_id);
@@ -90,7 +90,7 @@ fn extract_axis_projected_part(
                     part.ap_neighbour_bnd_patch_id
                         .push(ap.neighbour_bnd_patch_id);
                 } else {
-                    part.ap_has_bnd.push(false);
+                    part.ap_is_immersed_face.push(false);
                 }
             }
         }
@@ -133,7 +133,7 @@ pub fn build_axis_projected_mesh(
         mesh.internal_faces_axis.extend(p.internal_faces_axis);
         mesh.bnd_faces_owner.extend(p.bnd_faces_owner);
         mesh.bnd_faces_dir.extend(p.bnd_faces_dir);
-        mesh.ap_has_bnd.extend(p.ap_has_bnd);
+        mesh.ap_is_immersed_face.extend(p.ap_is_immersed_face);
         mesh.ap_dist_owner_to_bnd.extend(p.ap_dist_owner_to_bnd);
         mesh.ap_dist_neighbour_to_bnd
             .extend(p.ap_dist_neighbour_to_bnd);

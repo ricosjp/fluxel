@@ -120,7 +120,7 @@ pub struct CfdAxisProjectedMesh {
     pub bnd_faces_owner: Py<PyArray1<usize>>,
     pub bnd_faces_dir: Py<PyArray1<u8>>,
 
-    pub ap_has_bnd: Py<PyArray1<bool>>,
+    pub ap_is_immersed_face: Py<PyArray1<bool>>,
     pub ap_dist_owner_to_bnd: Py<PyArray1<f64>>,
     pub ap_dist_neighbour_to_bnd: Py<PyArray1<f64>>,
     pub ap_owner_far_cell_id: Py<PyArray1<usize>>,
@@ -170,7 +170,7 @@ impl CfdAxisProjectedMesh {
                     .collect(),
             ),
 
-            ap_has_bnd: vec_to_py1(py, core_mesh.ap_has_bnd),
+            ap_is_immersed_face: vec_to_py1(py, core_mesh.ap_is_immersed_face),
             ap_dist_owner_to_bnd: vec_to_py1(py, core_mesh.ap_dist_owner_to_bnd),
             ap_dist_neighbour_to_bnd: vec_to_py1(py, core_mesh.ap_dist_neighbour_to_bnd),
             ap_owner_far_cell_id: vec_to_py1(py, core_mesh.ap_owner_far_cell_id),

@@ -154,7 +154,7 @@ class CfdAxisProjectedMesh:
         0: -X, 1: +X, 2: -Y, 3: +Y, 4: -Z, 5: +Z
 
     [Axis-Projected IBM Specific Data]
-    ap_has_bnd : numpy.ndarray
+    ap_is_immersed_face : numpy.ndarray
         Array of shape (N_internal_faces,) dtype=bool
         a boolean flag indicating
         whether each internal face intersects the immersed boundary.
@@ -206,7 +206,7 @@ class CfdAxisProjectedMesh:
     bnd_faces_owner: np.ndarray
     bnd_faces_dir: np.ndarray
 
-    ap_has_bnd: np.ndarray
+    ap_is_immersed_face: np.ndarray
     ap_dist_owner_to_bnd: np.ndarray
     ap_dist_neighbour_to_bnd: np.ndarray
     ap_owner_far_cell_id: np.ndarray
