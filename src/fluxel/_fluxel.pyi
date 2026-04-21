@@ -246,7 +246,7 @@ class FluxelManager:
 
     def build_ghost_cell_mesh(
         self,
-        stl_path: str,
+        mesh_path: str | None,
         target_level: int,
         fluid_seed_point: list[float],
     ) -> CfdGhostCellMesh:
@@ -260,10 +260,11 @@ class FluxelManager:
 
         Parameters
         ----------
-        stl_path : str
-            Path to the input STL geometry file.
+        mesh_path : str | None
+            Path to the input STL / OBJ geometry file.
+            Specifying None will generate a mesh without immersed boundary.
         target_level : int
-            The maximum octree refinement level applied around the STL surface.
+            The maximum octree refinement level around the input surface.
         fluid_seed_point : list of float
             The point in the physical domain to seed the fluid region.
 
@@ -281,7 +282,7 @@ class FluxelManager:
         ...
 
     def build_axis_projected_mesh(
-        self, stl_path: str, target_level: int
+        self, mesh_path: str | None, target_level: int
     ) -> CfdAxisProjectedMesh:
         """
         Builds a CFD mesh
@@ -294,10 +295,11 @@ class FluxelManager:
 
         Parameters
         ----------
-        stl_path : str
-            Path to the input STL geometry file.
+        mesh_path : str | None
+            Path to the input STL / OBJ geometry file.
+            Specifying None will generate a mesh without immersed boundary.
         target_level : int
-            The maximum octree refinement level applied around the STL surface.
+            The maximum octree refinement level around the input surface.
 
         Returns
         -------

@@ -2,7 +2,7 @@
 #
 # Paths are relative to the current working directory unless absolute.
 
-input_stl: "data/stl/DrivAer.stl"
+input_mesh: "data/stl/DrivAer.stl"
 output_vtu: "examples/output/apibm/apibm_DrivAer.vtu"
 
 target_level: 3

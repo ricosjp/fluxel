@@ -2,7 +2,7 @@
 #
 # Paths are relative to the current working directory unless absolute.
 
-input_stl: "data/obj/motorBike.obj"
+input_mesh: "data/obj/motorBike.obj"
 output_vtu: "examples/output/gcibm/gcibm_motorBike.vtu"
 
 target_level: 4

@@ -17,39 +17,64 @@ pub struct FluxelManager {
 }
 
 impl FluxelManager {
+    fn load_ibm_mesh(mesh_path: Option<&str>) -> PyResult<IBMMesh> {
+        match mesh_path {
+            Some(mesh_path) => {
+                let path = Path::new(mesh_path);
+                if !path.exists() {
+                    return Err(PyValueError::new_err(format!(
+                        "Mesh file not found: {}",
+                        mesh_path
+                    )));
+                }
+
+                let loader = match path
+                    .extension()
+                    .and_then(|e| e.to_str())
+                    .map(|e| e.to_ascii_lowercase())
+                    .as_deref()
+                {
+                    Some("stl") => IBMMesh::from_stl_file,
+                    Some("obj") => IBMMesh::from_obj_file,
+                    Some(other) => {
+                        return Err(PyValueError::new_err(format!(
+                            "Unsupported mesh extension '.{other}'. Use .stl or .obj."
+                        )));
+                    }
+                    None => {
+                        return Err(PyValueError::new_err(
+                            "Mesh file has no extension. Use .stl or .obj.",
+                        ));
+                    }
+                };
+
+                loader(path).map_err(|e| PyValueError::new_err(e.to_string()))
+            }
+            None => {
+                // Place a dummy triangle far outside the domain when mesh input is omitted.
+                let dummy_v = vec![
+                    [1e10, 1e10, 1e10],
+                    [1e10 + 1.0, 1e10, 1e10],
+                    [1e10, 1e10 + 1.0, 1e10],
+                ];
+                let dummy_i = vec![[0, 1, 2]];
+                Ok(IBMMesh::from_vertices_indices_and_patches(
+                    &dummy_v,
+                    &dummy_i,
+                    vec!["empty".to_string()],
+                    vec![0],
+                ))
+            }
+        }
+    }
+
     /// Shared preprocessing pipeline used by both GCIBM and APIBM mesh builders.
     fn prepare_forest_and_mesh(
         &self,
-        mesh_path: &str,
+        mesh_path: Option<&str>,
         target_level: u8,
     ) -> PyResult<(CoreForest, Geometry, IBMMesh)> {
-        let path = Path::new(mesh_path);
-        if !path.exists() {
-            return Err(PyValueError::new_err(format!(
-                "Mesh file not found: {}",
-                mesh_path
-            )));
-        }
-
-        let ext = path
-            .extension()
-            .and_then(|e| e.to_str())
-            .map(|e| e.to_ascii_lowercase());
-        let ibm_mesh = match ext.as_deref() {
-            Some("stl") => IBMMesh::from_stl_file(path),
-            Some("obj") => IBMMesh::from_obj_file(path),
-            Some(other) => {
-                return Err(PyValueError::new_err(format!(
-                    "Unsupported mesh extension '.{other}'. Use .stl or .obj."
-                )));
-            }
-            None => {
-                return Err(PyValueError::new_err(
-                    "Mesh file has no extension. Use .stl or .obj.",
-                ));
-            }
-        }
-        .map_err(|e| PyValueError::new_err(e.to_string()))?;
+        let ibm_mesh = Self::load_ibm_mesh(mesh_path)?;
 
         let geom = Geometry::new(self.core_bbox, self.base_res);
 
@@ -103,11 +128,11 @@ impl FluxelManager {
     pub fn build_ghost_cell_mesh(
         &self,
         py: Python<'_>,
-        stl_path: &str,
+        mesh_path: Option<&str>,
         target_level: u8,
         fluid_seed_point: [f64; 3],
     ) -> PyResult<CfdGhostCellMesh> {
-        let (forest, geom, ibm_mesh) = self.prepare_forest_and_mesh(stl_path, target_level)?;
+        let (forest, geom, ibm_mesh) = self.prepare_forest_and_mesh(mesh_path, target_level)?;
 
         let mut cell_types = solver::mark_intersecting_cells(&forest, &geom, &ibm_mesh);
 
@@ -132,10 +157,10 @@ impl FluxelManager {
     pub fn build_axis_projected_mesh(
         &self,
         py: Python<'_>,
-        stl_path: &str,
+        mesh_path: Option<&str>,
         target_level: u8,
     ) -> PyResult<CfdAxisProjectedMesh> {
-        let (forest, geom, ibm_mesh) = self.prepare_forest_and_mesh(stl_path, target_level)?;
+        let (forest, geom, ibm_mesh) = self.prepare_forest_and_mesh(mesh_path, target_level)?;
 
         let cell_types = solver::mark_intersecting_cells(&forest, &geom, &ibm_mesh);
 

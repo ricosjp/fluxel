@@ -21,7 +21,7 @@ impl IBMMesh {
     /// Builds an `IBMMesh` from vertex and triangle-index arrays.
     ///
     /// STL loading utilities can be implemented as thin wrappers around this constructor.
-    fn from_vertices_indices_and_patches(
+    pub fn from_vertices_indices_and_patches(
         vertices: &[[f64; 3]],
         indices: &[[u32; 3]],
         patch_names: Vec<String>,

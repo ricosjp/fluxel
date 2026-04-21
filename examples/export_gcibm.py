@@ -29,7 +29,7 @@ class BoundingBoxConfig(BaseModel, frozen=True):
 class GcibmExportConfig(BaseModel, frozen=True):
     """Validated GCIBM export settings loaded from YAML."""
 
-    input_stl: pathlib.Path
+    input_mesh: pathlib.Path
     output_vtu: pathlib.Path = Field(
         default_factory=lambda: pathlib.Path("gcibm_result.vtu")
     )
@@ -39,16 +39,16 @@ class GcibmExportConfig(BaseModel, frozen=True):
     bounding_box: BoundingBoxConfig = Field(default_factory=BoundingBoxConfig)
     fluid_seed_point: list[float, float, float]
 
-    @field_validator("input_stl", mode="after")
+    @field_validator("input_mesh", mode="after")
     @classmethod
-    def _validate_input_stl(cls, v: pathlib.Path) -> pathlib.Path:
+    def _validate_input_mesh(cls, v: pathlib.Path) -> pathlib.Path:
         match v.suffix:
             case ".stl":
                 return v
             case ".obj":
                 return v
             case _:
-                raise ValueError(f"input_stl must be an STL or OBJ file: {v}")
+                raise ValueError(f"input_mesh must be an STL or OBJ file: {v}")
 
     @field_validator("base_resolution", mode="after")
     @classmethod
@@ -270,7 +270,7 @@ def export_gcibm_mesh(
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
         description=(
-            "Generate a GCIBM mesh from an STL file and export it for ParaView."
+            "Generate a GCIBM mesh from STL / OBJ and export it as VTU."
             "All run parameters are read from a YAML configuration file."
         )
     )
@@ -295,7 +295,7 @@ if __name__ == "__main__":
     base_res = cfg.base_resolution
     target_level = cfg.target_level
     n_leaf_refinement = cfg.n_leaf_refinement
-    stl_path = cfg.input_stl
+    mesh_path = cfg.input_mesh
     output_path = cfg.output_vtu
     fluid_seed = cfg.fluid_seed_point
 
@@ -304,7 +304,7 @@ if __name__ == "__main__":
     print(f"Base Resolution: {base_res}")
     print(f"Target Level: {target_level}")
     print(f"Number of Leaf Refinements: {n_leaf_refinement}")
-    print(f"Input STL File: {stl_path}")
+    print(f"Input Mesh File: {mesh_path}")
     print(f"Output VTU File: {output_path}")
     print(f"Fluid seed point: {fluid_seed}")
 
@@ -312,14 +312,14 @@ if __name__ == "__main__":
     manager = FluxelManager(
         bbox, base_res=base_res, n_leaf_refinement=n_leaf_refinement
     )
-    if not stl_path.exists():
-        raise SystemExit(f"Input STL file does not exist: {stl_path}")
+    if not mesh_path.exists():
+        raise SystemExit(f"Input mesh file does not exist: {mesh_path}")
 
     # 3. メッシュの生成
     print("\n Starting mesh generation...")
     t0 = time.time()
     mesh = manager.build_ghost_cell_mesh(
-        str(stl_path), target_level=target_level, fluid_seed_point=fluid_seed
+        str(mesh_path), target_level=target_level, fluid_seed_point=fluid_seed
     )
     t1 = time.time()
     print(f"Mesh generation completed in {t1 - t0:.2f} seconds")
