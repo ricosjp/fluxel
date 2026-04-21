@@ -209,7 +209,7 @@ def export_axis_projected_polylines(
         )
     if n_hit != len(dist_owner_to_bnd) or n_hit != len(dist_neighbour_to_bnd):
         raise ValueError(
-            "dist_* and is_immersed_face selections must have consistent lengths"
+            "dist_* and is_immersed_face must have consistent lengths"
         )
     direction = np.array([0.0, 0.0, 0.0])
     match axis:
@@ -291,7 +291,9 @@ def _axis_internal_mesh_slice(
 ]:
     """Return per-axis interior-face arrays (same order as the Rust builder)."""
     mask_for_n_faces = mesh.internal_faces_axis == axis.value
-    mask_for_n_immersed_faces = mesh.internal_faces_axis[mesh.ap_is_immersed_face] == axis.value
+    mask_for_n_immersed_faces = (
+        mesh.internal_faces_axis[mesh.ap_is_immersed_face] == axis.value
+    )
     return (
         mesh.internal_faces_owner[mask_for_n_faces],
         mesh.internal_faces_neighbour[mask_for_n_faces],
@@ -379,8 +381,9 @@ def export_apibm_debug_data(
 
 
 def bnd_type_for_axis(mesh: CfdAxisProjectedMesh, axis: Axis) -> np.ndarray:
-    mask_for_n_immersed_faces = mesh.internal_faces_axis[mesh.ap_is_immersed_face] == axis.value
-    # `==` binds looser than `&`; needs parentheses (otherwise compared to `axis & ap_is_immersed_face`).
+    mask_for_n_immersed_faces = (
+        mesh.internal_faces_axis[mesh.ap_is_immersed_face] == axis.value
+    )
     mask_for_n_faces = (
         mesh.internal_faces_axis == axis.value
     ) & mesh.ap_is_immersed_face
@@ -389,8 +392,7 @@ def bnd_type_for_axis(mesh: CfdAxisProjectedMesh, axis: Axis) -> np.ndarray:
     nf_m = mesh.ap_neighbour_far_cell_id[mask_for_n_immersed_faces]
     ow_m = mesh.internal_faces_owner[mask_for_n_faces]
     nb_m = mesh.internal_faces_neighbour[mask_for_n_faces]
-    # Far stencil ids first, then owner/neighbour: same cell id can be both (Rust uses owner id
-    # when no valid far neighbour), in which case -1 / 1 overwrite -2 / 2.
+    # Far stencil ids first, then owner/neighbour (just for visualization)
     bt[of_m] = -2
     bt[nf_m] = 2
     bt[ow_m] = -1

@@ -194,7 +194,7 @@ def export_gcibm_debug_data(
     )
     print(f"Saved debug arrays to {output_prefix}.npz")
 
-    centers =mesh.cell_centers[mesh.gc_cell_ids]
+    centers = mesh.cell_centers[mesh.gc_cell_ids]
     intercepts = mesh.gc_bnd_intercepts
     image_points = mesh.gc_image_points
 
