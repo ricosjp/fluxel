@@ -16,12 +16,12 @@ default:
     - apt install -y build-essential curl
     - curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
     - source ~/.cargo/env
-    - cargo install cargo-nextest cargo-llvm-cov
-    - make dev-install
+    - cargo install cargo-nextest cargo-llvm-cov --locked
 
 lint:
   stage: test
   script:
+    - uv sync --group lint
     - make lint
   tags:
     - no-gpu
@@ -29,6 +29,7 @@ lint:
 pytest:
   stage: test
   script:
+    - uv sync --group test
     - make test
   tags:
     - no-gpu
