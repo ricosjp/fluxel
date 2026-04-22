@@ -330,7 +330,7 @@ if __name__ == "__main__":
     num_x_faces = int(np.count_nonzero(axis == 0))
     num_y_faces = int(np.count_nonzero(axis == 1))
     num_z_faces = int(np.count_nonzero(axis == 2))
-    bnd_dir = mesh.bnd_faces_dir
+    bnd_dir = mesh.domain_bnd_faces_dir
     num_x_bnd_minus = int(np.count_nonzero(bnd_dir == 0))
     num_x_bnd_plus = int(np.count_nonzero(bnd_dir == 1))
     num_y_bnd_minus = int(np.count_nonzero(bnd_dir == 2))

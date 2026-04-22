@@ -16,8 +16,8 @@ struct AxisProjectedPart {
     internal_faces_owner: Vec<usize>,
     internal_faces_neighbour: Vec<usize>,
     internal_faces_axis: Vec<Axis>,
-    bnd_faces_owner: Vec<usize>,
-    bnd_faces_dir: Vec<Direction>,
+    domain_bnd_faces_owner: Vec<usize>,
+    domain_bnd_faces_dir: Vec<Direction>,
 
     ap_is_immersed_face: Vec<bool>,
     ap_dist_owner_to_bnd: Vec<f64>,
@@ -53,14 +53,14 @@ fn extract_axis_projected_part(
         let (dir_minus, dir_plus) = axis.split_into_directions();
         let minus_nbrs = forest.face_neighbour_global_ids(global_id, dir_minus);
         if minus_nbrs.is_empty() {
-            part.bnd_faces_owner.push(global_id);
-            part.bnd_faces_dir.push(dir_minus);
+            part.domain_bnd_faces_owner.push(global_id);
+            part.domain_bnd_faces_dir.push(dir_minus);
         }
 
         let plus_nbrs = forest.face_neighbour_global_ids(global_id, dir_plus);
         if plus_nbrs.is_empty() {
-            part.bnd_faces_owner.push(global_id);
-            part.bnd_faces_dir.push(dir_plus);
+            part.domain_bnd_faces_owner.push(global_id);
+            part.domain_bnd_faces_dir.push(dir_plus);
         } else {
             for &nbr_id in &plus_nbrs {
                 part.internal_faces_owner.push(global_id);
@@ -131,8 +131,8 @@ pub fn build_axis_projected_mesh(
         mesh.internal_faces_neighbour
             .extend(p.internal_faces_neighbour);
         mesh.internal_faces_axis.extend(p.internal_faces_axis);
-        mesh.bnd_faces_owner.extend(p.bnd_faces_owner);
-        mesh.bnd_faces_dir.extend(p.bnd_faces_dir);
+        mesh.domain_bnd_faces_owner.extend(p.domain_bnd_faces_owner);
+        mesh.domain_bnd_faces_dir.extend(p.domain_bnd_faces_dir);
         mesh.ap_is_immersed_face.extend(p.ap_is_immersed_face);
         mesh.ap_dist_owner_to_bnd.extend(p.ap_dist_owner_to_bnd);
         mesh.ap_dist_neighbour_to_bnd

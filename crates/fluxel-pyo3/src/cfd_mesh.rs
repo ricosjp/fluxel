@@ -36,8 +36,8 @@ pub struct CfdGhostCellMesh {
     pub internal_faces_owner: Py<PyArray1<usize>>,
     pub internal_faces_neighbour: Py<PyArray1<usize>>,
     pub internal_faces_axis: Py<PyArray1<u8>>,
-    pub bnd_faces_owner: Py<PyArray1<usize>>,
-    pub bnd_faces_dir: Py<PyArray1<u8>>,
+    pub domain_bnd_faces_owner: Py<PyArray1<usize>>,
+    pub domain_bnd_faces_dir: Py<PyArray1<u8>>,
 
     pub gc_is_fluid: Py<PyArray1<bool>>,
     pub gc_cell_ids: Py<PyArray1<usize>>,
@@ -76,11 +76,11 @@ impl CfdGhostCellMesh {
                     .map(|axis| axis as u8)
                     .collect(),
             ),
-            bnd_faces_owner: vec_to_py1(py, core_mesh.bnd_faces_owner),
-            bnd_faces_dir: vec_to_py1(
+            domain_bnd_faces_owner: vec_to_py1(py, core_mesh.domain_bnd_faces_owner),
+            domain_bnd_faces_dir: vec_to_py1(
                 py,
                 core_mesh
-                    .bnd_faces_dir
+                    .domain_bnd_faces_dir
                     .into_iter()
                     .map(|dir| dir as u8)
                     .collect(),
@@ -117,8 +117,8 @@ pub struct CfdAxisProjectedMesh {
     pub internal_faces_owner: Py<PyArray1<usize>>,
     pub internal_faces_neighbour: Py<PyArray1<usize>>,
     pub internal_faces_axis: Py<PyArray1<u8>>,
-    pub bnd_faces_owner: Py<PyArray1<usize>>,
-    pub bnd_faces_dir: Py<PyArray1<u8>>,
+    pub domain_bnd_faces_owner: Py<PyArray1<usize>>,
+    pub domain_bnd_faces_dir: Py<PyArray1<u8>>,
 
     pub ap_is_immersed_face: Py<PyArray1<bool>>,
     pub ap_dist_owner_to_bnd: Py<PyArray1<f64>>,
@@ -160,11 +160,11 @@ impl CfdAxisProjectedMesh {
                     .map(|axis| axis as u8)
                     .collect(),
             ),
-            bnd_faces_owner: vec_to_py1(py, core_mesh.bnd_faces_owner),
-            bnd_faces_dir: vec_to_py1(
+            domain_bnd_faces_owner: vec_to_py1(py, core_mesh.domain_bnd_faces_owner),
+            domain_bnd_faces_dir: vec_to_py1(
                 py,
                 core_mesh
-                    .bnd_faces_dir
+                    .domain_bnd_faces_dir
                     .into_iter()
                     .map(|dir| dir as u8)
                     .collect(),

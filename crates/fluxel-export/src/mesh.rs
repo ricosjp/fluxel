@@ -1,6 +1,6 @@
 //! CFD-oriented mesh data structures for export.
 //! Interior faces are stored in a **combined** list with an explicit per-face axis tag
-//! (`internal_faces_axis`). Domain boundary faces use `bnd_faces_dir` (six canonical directions).
+//! (`internal_faces_axis`). Domain boundary faces use `domain_bnd_faces_dir` (six canonical directions).
 //! Face normals and areas can be derived from the axis when needed.
 
 use fluxel_core::{Axis, CoordinateType, Direction};
@@ -20,8 +20,8 @@ pub struct CfdGhostCellMesh {
     pub internal_faces_neighbour: Vec<usize>,
     pub internal_faces_axis: Vec<Axis>,
 
-    pub bnd_faces_owner: Vec<usize>,
-    pub bnd_faces_dir: Vec<Direction>,
+    pub domain_bnd_faces_owner: Vec<usize>,
+    pub domain_bnd_faces_dir: Vec<Direction>,
 
     // --- GCIBM-specific fields ---
     /// Encoded cell category: `true` = Fluid, `false` = Solid.
@@ -59,8 +59,8 @@ pub struct CfdAxisProjectedMesh {
     pub internal_faces_neighbour: Vec<usize>,
     pub internal_faces_axis: Vec<Axis>,
 
-    pub bnd_faces_owner: Vec<usize>,
-    pub bnd_faces_dir: Vec<Direction>,
+    pub domain_bnd_faces_owner: Vec<usize>,
+    pub domain_bnd_faces_dir: Vec<Direction>,
 
     // --- APIBM-specific fields ---
     pub ap_is_immersed_face: Vec<bool>,

@@ -56,11 +56,11 @@ class CfdGhostCellMesh:
         Array of shape (N_internal_faces,) dtype=uint8
         the axis of the internal faces.
         0: X, 1: Y, 2: Z
-    bnd_faces_owner : numpy.ndarray
-        Array of shape (N_bnd_faces,) dtype=uint64
+    domain_bnd_faces_owner : numpy.ndarray
+        Array of shape (N_domain_bnd_faces,) dtype=uint64
         the owner cell index for domain boundary faces.
-    bnd_faces_dir : numpy.ndarray
-        Array of shape (N_bnd_faces,) dtype=uint8
+    domain_bnd_faces_dir : numpy.ndarray
+        Array of shape (N_domain_bnd_faces,) dtype=uint8
         the direction of the domain boundary faces.
         0: -X, 1: +X, 2: -Y, 3: +Y, 4: -Z, 5: +Z
 
@@ -101,8 +101,8 @@ class CfdGhostCellMesh:
     internal_faces_owner: np.ndarray
     internal_faces_neighbour: np.ndarray
     internal_faces_axis: np.ndarray
-    bnd_faces_owner: np.ndarray
-    bnd_faces_dir: np.ndarray
+    domain_bnd_faces_owner: np.ndarray
+    domain_bnd_faces_dir: np.ndarray
 
     gc_is_fluid: np.ndarray
     gc_cell_ids: np.ndarray
@@ -145,11 +145,11 @@ class CfdAxisProjectedMesh:
         Array of shape (N_internal_faces,) dtype=uint8
         the axis of the internal faces.
         0: X, 1: Y, 2: Z
-    bnd_faces_owner : numpy.ndarray
-        Array of shape (N_bnd_faces,) dtype=uint64
+    domain_bnd_faces_owner : numpy.ndarray
+        Array of shape (N_domain_bnd_faces,) dtype=uint64
         the owner cell index for domain boundary faces.
-    bnd_faces_dir : numpy.ndarray
-        Array of shape (N_bnd_faces,) dtype=uint8
+    domain_bnd_faces_dir : numpy.ndarray
+        Array of shape (N_domain_bnd_faces,) dtype=uint8
         the direction of the domain boundary faces.
         0: -X, 1: +X, 2: -Y, 3: +Y, 4: -Z, 5: +Z
 
@@ -203,8 +203,8 @@ class CfdAxisProjectedMesh:
     internal_faces_owner: np.ndarray
     internal_faces_neighbour: np.ndarray
     internal_faces_axis: np.ndarray
-    bnd_faces_owner: np.ndarray
-    bnd_faces_dir: np.ndarray
+    domain_bnd_faces_owner: np.ndarray
+    domain_bnd_faces_dir: np.ndarray
 
     ap_is_immersed_face: np.ndarray
     ap_dist_owner_to_bnd: np.ndarray

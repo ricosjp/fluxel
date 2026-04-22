@@ -329,8 +329,8 @@ def export_apibm_debug_data(
         internal_faces_owner=mesh.internal_faces_owner,
         internal_faces_neighbour=mesh.internal_faces_neighbour,
         internal_faces_axis=mesh.internal_faces_axis,
-        bnd_faces_owner=mesh.bnd_faces_owner,
-        bnd_faces_dir=mesh.bnd_faces_dir,
+        domain_bnd_faces_owner=mesh.domain_bnd_faces_owner,
+        domain_bnd_faces_dir=mesh.domain_bnd_faces_dir,
         ap_is_immersed_face=mesh.ap_is_immersed_face,
         ap_dist_owner_to_bnd=mesh.ap_dist_owner_to_bnd,
         ap_dist_neighbour_to_bnd=mesh.ap_dist_neighbour_to_bnd,
@@ -503,7 +503,7 @@ if __name__ == "__main__":
     num_x_faces = int(np.count_nonzero(ax == Axis.X))
     num_y_faces = int(np.count_nonzero(ax == Axis.Y))
     num_z_faces = int(np.count_nonzero(ax == Axis.Z))
-    bnd_dir = mesh.bnd_faces_dir
+    bnd_dir = mesh.domain_bnd_faces_dir
     num_x_bnd_minus = int(np.count_nonzero(bnd_dir == Direction.XMinus))
     num_x_bnd_plus = int(np.count_nonzero(bnd_dir == Direction.XPlus))
     num_y_bnd_minus = int(np.count_nonzero(bnd_dir == Direction.YMinus))
