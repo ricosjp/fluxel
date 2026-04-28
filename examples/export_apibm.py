@@ -165,7 +165,9 @@ def mesh_to_unstructured_grid(
     cell_types = np.full(n_cells, pv.CellType.HEXAHEDRON, dtype=np.uint8)
 
     grid = pv.UnstructuredGrid(cells.ravel(), cell_types, points)
-    return grid
+
+    cleaned_grid = grid.clean(tolerance=1e-6)
+    return cleaned_grid
 
 
 def export_axis_projected_polylines(
