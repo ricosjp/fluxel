@@ -5,6 +5,8 @@ This module provides the Python interface for Fluxel,
 an Adaptive Mesh Refinement (AMR) library based on Space-Filling Curves.
 """
 
+from abc import ABC, abstractmethod
+
 import numpy as np
 
 class BoundingBox:
@@ -24,7 +26,43 @@ class BoundingBox:
 
     def __init__(self, min: list[float], max: list[float]) -> None: ...
 
-class CfdGhostCellMesh:
+class ICfdMesh(ABC):
+    """
+    Interface for CFD meshes.
+    """
+
+    @abstractmethod
+    @property
+    def n_cells(self) -> int: ...
+    @abstractmethod
+    @property
+    def coordinate_type(self) -> int: ...
+    @abstractmethod
+    @property
+    def cell_centers(self) -> np.ndarray: ...
+    @abstractmethod
+    @property
+    def cell_sizes(self) -> np.ndarray: ...
+    @abstractmethod
+    @property
+    def patch_name_to_id(self) -> dict[str, int]: ...
+    @abstractmethod
+    @property
+    def internal_faces_owner(self) -> np.ndarray: ...
+    @abstractmethod
+    @property
+    def internal_faces_neighbour(self) -> np.ndarray: ...
+    @abstractmethod
+    @property
+    def internal_faces_axis(self) -> np.ndarray: ...
+    @abstractmethod
+    @property
+    def domain_bnd_faces_owner(self) -> np.ndarray: ...
+    @abstractmethod
+    @property
+    def domain_bnd_faces_dir(self) -> np.ndarray: ...
+
+class CfdGhostCellMesh(ICfdMesh):
     """
     Structure of Arrays (SoA) mesh representation for CFD solvers
     using the Ghost-Cell Immersed Boundary Method (GCIBM).
@@ -92,28 +130,44 @@ class CfdGhostCellMesh:
         the interpolation weights corresponding to `interp_stencil_indices`.
     """
 
-    n_cells: int
-    coordinate_type: int
-    cell_centers: np.ndarray
-    cell_sizes: np.ndarray
-    patch_name_to_id: dict[str, int]
+    @property
+    def n_cells(self) -> int: ...
+    @property
+    def coordinate_type(self) -> int: ...
+    @property
+    def cell_centers(self) -> np.ndarray: ...
+    @property
+    def cell_sizes(self) -> np.ndarray: ...
+    @property
+    def patch_name_to_id(self) -> dict[str, int]: ...
+    @property
+    def internal_faces_owner(self) -> np.ndarray: ...
+    @property
+    def internal_faces_neighbour(self) -> np.ndarray: ...
+    @property
+    def internal_faces_axis(self) -> np.ndarray: ...
+    @property
+    def domain_bnd_faces_owner(self) -> np.ndarray: ...
+    @property
+    def domain_bnd_faces_dir(self) -> np.ndarray: ...
+    @property
+    def gc_is_fluid(self) -> np.ndarray: ...
+    @property
+    def gc_cell_ids(self) -> np.ndarray: ...
+    @property
+    def gc_bnd_anchor_ids(self) -> np.ndarray: ...
+    @property
+    def gc_bnd_patch_ids(self) -> np.ndarray: ...
+    @property
+    def gc_bnd_intercepts(self) -> np.ndarray: ...
+    @property
+    def gc_image_points(self) -> np.ndarray: ...
+    @property
+    def gc_interp_stencil_indices(self) -> np.ndarray: ...
+    @property
+    def gc_interp_stencil_weights(self) -> np.ndarray: ...
 
-    internal_faces_owner: np.ndarray
-    internal_faces_neighbour: np.ndarray
-    internal_faces_axis: np.ndarray
-    domain_bnd_faces_owner: np.ndarray
-    domain_bnd_faces_dir: np.ndarray
-
-    gc_is_fluid: np.ndarray
-    gc_cell_ids: np.ndarray
-    gc_bnd_anchor_ids: np.ndarray
-    gc_bnd_patch_ids: np.ndarray
-    gc_bnd_intercepts: np.ndarray
-    gc_image_points: np.ndarray
-    gc_interp_stencil_indices: np.ndarray
-    gc_interp_stencil_weights: np.ndarray
-
-class CfdAxisProjectedMesh:
+class CfdAxisProjectedMesh(ICfdMesh):
     """
     Structure of Arrays (SoA) mesh representation for CFD solvers
     using the Axis-Projected Immersed Boundary Method (APIBM/TFIBM).
@@ -194,29 +248,48 @@ class CfdAxisProjectedMesh:
         the boundary patch id for neighbour side of each axis.
     """
 
-    n_cells: int
-    coordinate_type: int
-    cell_centers: np.ndarray
-    cell_sizes: np.ndarray
-    patch_name_to_id: dict[str, int]
-
-    internal_faces_owner: np.ndarray
-    internal_faces_neighbour: np.ndarray
-    internal_faces_axis: np.ndarray
-    domain_bnd_faces_owner: np.ndarray
-    domain_bnd_faces_dir: np.ndarray
-
-    ap_is_immersed_face: np.ndarray
-    ap_dist_owner_to_bnd: np.ndarray
-    ap_dist_neighbour_to_bnd: np.ndarray
-    ap_owner_far_cell_id: np.ndarray
-    ap_neighbour_far_cell_id: np.ndarray
-    ap_owner_weights: np.ndarray
-    ap_neighbour_weights: np.ndarray
-    ap_owner_bnd_anchor_id: np.ndarray
-    ap_owner_bnd_patch_id: np.ndarray
-    ap_neighbour_bnd_anchor_id: np.ndarray
-    ap_neighbour_bnd_patch_id: np.ndarray
+    @property
+    def n_cells(self) -> int: ...
+    @property
+    def coordinate_type(self) -> int: ...
+    @property
+    def cell_centers(self) -> np.ndarray: ...
+    @property
+    def cell_sizes(self) -> np.ndarray: ...
+    @property
+    def patch_name_to_id(self) -> dict[str, int]: ...
+    @property
+    def internal_faces_owner(self) -> np.ndarray: ...
+    @property
+    def internal_faces_neighbour(self) -> np.ndarray: ...
+    @property
+    def internal_faces_axis(self) -> np.ndarray: ...
+    @property
+    def domain_bnd_faces_owner(self) -> np.ndarray: ...
+    @property
+    def domain_bnd_faces_dir(self) -> np.ndarray: ...
+    @property
+    def ap_is_immersed_face(self) -> np.ndarray: ...
+    @property
+    def ap_dist_owner_to_bnd(self) -> np.ndarray: ...
+    @property
+    def ap_dist_neighbour_to_bnd(self) -> np.ndarray: ...
+    @property
+    def ap_owner_far_cell_id(self) -> np.ndarray: ...
+    @property
+    def ap_neighbour_far_cell_id(self) -> np.ndarray: ...
+    @property
+    def ap_owner_weights(self) -> np.ndarray: ...
+    @property
+    def ap_neighbour_weights(self) -> np.ndarray: ...
+    @property
+    def ap_owner_bnd_anchor_id(self) -> np.ndarray: ...
+    @property
+    def ap_owner_bnd_patch_id(self) -> np.ndarray: ...
+    @property
+    def ap_neighbour_bnd_anchor_id(self) -> np.ndarray: ...
+    @property
+    def ap_neighbour_bnd_patch_id(self) -> np.ndarray: ...
 
 class FluxelManager:
     """
