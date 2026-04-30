@@ -5,7 +5,7 @@ This module provides the Python interface for Fluxel,
 an Adaptive Mesh Refinement (AMR) library based on Space-Filling Curves.
 """
 
-from abc import ABC, abstractmethod
+from typing import Protocol, runtime_checkable
 
 import numpy as np
 
@@ -26,39 +26,30 @@ class BoundingBox:
 
     def __init__(self, min: list[float], max: list[float]) -> None: ...
 
-class ICfdMesh(ABC):
+@runtime_checkable
+class ICfdMesh(Protocol):
     """
     Interface for CFD meshes.
     """
 
-    @abstractmethod
     @property
     def n_cells(self) -> int: ...
-    @abstractmethod
     @property
     def coordinate_type(self) -> int: ...
-    @abstractmethod
     @property
     def cell_centers(self) -> np.ndarray: ...
-    @abstractmethod
     @property
     def cell_sizes(self) -> np.ndarray: ...
-    @abstractmethod
     @property
     def patch_name_to_id(self) -> dict[str, int]: ...
-    @abstractmethod
     @property
     def internal_faces_owner(self) -> np.ndarray: ...
-    @abstractmethod
     @property
     def internal_faces_neighbour(self) -> np.ndarray: ...
-    @abstractmethod
     @property
     def internal_faces_axis(self) -> np.ndarray: ...
-    @abstractmethod
     @property
     def domain_bnd_faces_owner(self) -> np.ndarray: ...
-    @abstractmethod
     @property
     def domain_bnd_faces_dir(self) -> np.ndarray: ...
 
