@@ -524,6 +524,7 @@ if __name__ == "__main__":
     print(f"Total Z Boundary Minus: {num_z_bnd_minus}")
     print(f"Total Z Boundary Plus: {num_z_bnd_plus}")
     print(f"Patch Names: {list(mesh.patch_name_to_id.keys())}")
+    print(f"Patch IDs: {list(mesh.patch_name_to_id.values())}")
     print("====================")
 
     # 5. メッシュの保存

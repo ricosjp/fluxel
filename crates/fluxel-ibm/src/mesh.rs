@@ -64,7 +64,7 @@ impl IBMMesh {
             })
             .collect();
 
-        let patch_names: Vec<String> = vec!["_default".to_string(); indices.len()];
+        let patch_names: Vec<String> = vec!["_default".to_string()];
         let anchor_to_patch_id: Vec<usize> = vec![0; indices.len()];
 
         Ok(Self::from_vertices_indices_and_patches(

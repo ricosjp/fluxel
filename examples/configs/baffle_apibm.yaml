@@ -1,0 +1,16 @@
+# APIBM mesh export configuration for export_apibm.py
+#
+# Paths are relative to the current working directory unless absolute.
+
+input_mesh: "data/stl/baffle.stl"
+output_vtu: "examples/output/apibm/apibm_baffle.vtu"
+
+target_level: 0
+n_leaf_refinement: 0
+base_resolution: [20, 20, 1]
+
+bounding_box:
+  min: [0.0, 0.0, 0.0]
+  max: [0.1, 0.1, 0.01]
+
+fluid_seed_point: [0.02, 0.02, 0.005]
