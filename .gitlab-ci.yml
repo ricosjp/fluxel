@@ -12,8 +12,7 @@ stages:
 default:
   image: astral/uv:python${PYTHON_VERSION}-${BASE_LAYER}
   before_script:
-    - apt update
-    - apt install -y build-essential curl
+    - apt-get update -qq && apt-get install -y -qq build-essential curl
     - curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
     - source ~/.cargo/env
     - cargo install cargo-llvm-cov --locked
@@ -29,6 +28,7 @@ lint:
 pytest:
   stage: test
   script:
+    - uv tool install maturin
     - uv sync --group test
     - cargo llvm-cov show-env --sh > .llvm-cov-env
     - . ./.llvm-cov-env
