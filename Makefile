@@ -5,10 +5,12 @@ reset:
 
 .PHONY: install
 install:
+	uv run maturin develop --release
 	uv sync --refresh --reinstall
 
 .PHONY: dev-install
 dev-install:
+	uv run maturin develop --release
 	uv sync --refresh --reinstall --group dev
 
 .PHONY: lint
