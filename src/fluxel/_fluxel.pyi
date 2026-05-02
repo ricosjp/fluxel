@@ -211,19 +211,11 @@ class CfdAxisProjectedMesh(ICfdMesh):
         Array of shape (N_internal_faces,) dtype=float64
         the distance from the neighbour cell center
         to the boundary intersection point along each axis.
-    ap_owner_far_cell_id : numpy.ndarray
-        Array of shape (N_internal_faces,) dtype=uint64
-        the far-cell index on the owner side
-        used for APIBM reconstruction along each axis.
-    ap_neighbour_far_cell_id : numpy.ndarray
-        Array of shape (N_internal_faces,) dtype=uint64
-        the far-cell index on the neighbour side
-        used for APIBM reconstruction along each axis.
     ap_owner_weights : numpy.ndarray
-        Array of shape (Nx_faces_with_bnd, 3) dtype=float64
+        Array of shape (Nx_faces_with_bnd, 2) dtype=float64
         APIBM reconstruction weights for the owner side on each axis.
     ap_neighbour_weights : numpy.ndarray
-        Array of shape (N_internal_faces, 3) dtype=float64
+        Array of shape (N_internal_faces, 2) dtype=float64
         APIBM reconstruction weights for the neighbour side on each axis.
     ap_owner_bnd_anchor_id : numpy.ndarray
         Array of shape (N_internal_faces,) dtype=uint64
@@ -265,10 +257,6 @@ class CfdAxisProjectedMesh(ICfdMesh):
     def ap_dist_owner_to_bnd(self) -> np.ndarray: ...
     @property
     def ap_dist_neighbour_to_bnd(self) -> np.ndarray: ...
-    @property
-    def ap_owner_far_cell_id(self) -> np.ndarray: ...
-    @property
-    def ap_neighbour_far_cell_id(self) -> np.ndarray: ...
     @property
     def ap_owner_weights(self) -> np.ndarray: ...
     @property

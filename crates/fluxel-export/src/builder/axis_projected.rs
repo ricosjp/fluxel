@@ -22,10 +22,8 @@ struct AxisProjectedPart {
     ap_is_immersed_face: Vec<bool>,
     ap_dist_owner_to_bnd: Vec<f64>,
     ap_dist_neighbour_to_bnd: Vec<f64>,
-    ap_owner_far_cell_id: Vec<usize>,
-    ap_neighbour_far_cell_id: Vec<usize>,
-    ap_owner_weights: Vec<[f64; 3]>,
-    ap_neighbour_weights: Vec<[f64; 3]>,
+    ap_owner_weights: Vec<[f64; 2]>,
+    ap_neighbour_weights: Vec<[f64; 2]>,
     ap_owner_bnd_anchor_id: Vec<usize>,
     ap_owner_bnd_patch_id: Vec<usize>,
     ap_neighbour_bnd_anchor_id: Vec<usize>,
@@ -79,8 +77,6 @@ fn extract_axis_projected_part(
                     part.ap_is_immersed_face.push(true);
                     part.ap_dist_owner_to_bnd.push(ap.dist_owner_to_bnd);
                     part.ap_dist_neighbour_to_bnd.push(ap.dist_neighbour_to_bnd);
-                    part.ap_owner_far_cell_id.push(ap.owner_far_cell_id);
-                    part.ap_neighbour_far_cell_id.push(ap.neighbour_far_cell_id);
                     part.ap_owner_weights.push(ap.owner_weights);
                     part.ap_neighbour_weights.push(ap.neighbour_weights);
                     part.ap_owner_bnd_anchor_id.push(ap.owner_bnd_anchor_id);
@@ -137,9 +133,6 @@ pub fn build_axis_projected_mesh(
         mesh.ap_dist_owner_to_bnd.extend(p.ap_dist_owner_to_bnd);
         mesh.ap_dist_neighbour_to_bnd
             .extend(p.ap_dist_neighbour_to_bnd);
-        mesh.ap_owner_far_cell_id.extend(p.ap_owner_far_cell_id);
-        mesh.ap_neighbour_far_cell_id
-            .extend(p.ap_neighbour_far_cell_id);
         mesh.ap_owner_weights.extend(p.ap_owner_weights);
         mesh.ap_neighbour_weights.extend(p.ap_neighbour_weights);
         mesh.ap_owner_bnd_anchor_id.extend(p.ap_owner_bnd_anchor_id);
