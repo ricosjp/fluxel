@@ -237,3 +237,42 @@ pub struct ApibmOneSideIntersection {
     /// IBM surface patch id for the hit.
     pub bnd_patch_id: usize,
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::mesh::IBMMesh;
+    use fluxel_core::Forest;
+    use fluxel_geometry::{BoundingBox, Geometry};
+
+    fn setup_vertical_plane_between_cells() -> (Forest, Geometry, IBMMesh) {
+        let mut forest = Forest::new([2, 1, 1]);
+        forest.populate_root_cells();
+
+        let bbox = BoundingBox::new([0.0, 0.0, 0.0], [1.0, 1.0, 1.0]);
+        let geom = Geometry::new(bbox, [2, 1, 1]);
+
+        let verts = [[0.5, 0.0, 0.0], [0.5, 1.0, 0.0], [0.5, 0.0, 1.0]];
+        let indices = [[0u32, 1, 2]];
+        let mesh = IBMMesh::from_vertices_indices_and_patches(
+            &verts,
+            &indices,
+            vec!["wall".into()],
+            vec![0],
+        );
+        (forest, geom, mesh)
+    }
+
+    #[test]
+    fn resolve_apibm_face_hits_plane_between_two_cells() {
+        let (forest, geom, mesh) = setup_vertical_plane_between_cells();
+
+        let merged = resolve_apibm_face(&forest, &geom, &mesh, 0, 1, Axis::X);
+        assert!(merged.is_some());
+
+        let o = resolve_owner_to_neighbour(&forest, &geom, &mesh, 0, 1, Axis::X);
+        let n = resolve_neighbour_to_owner(&forest, &geom, &mesh, 0, 1, Axis::X);
+        assert!(o.is_some());
+        assert!(n.is_some());
+    }
+}

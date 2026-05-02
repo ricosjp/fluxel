@@ -39,3 +39,35 @@ pub fn get_global_id_from_phys(forest: &Forest, geom: &Geometry, p: [f64; 3]) ->
     }
     None
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use fluxel_geometry::BoundingBox;
+
+    #[test]
+    fn maps_interior_point_to_single_root_cell() {
+        let mut forest = Forest::new([1, 1, 1]);
+        forest.populate_root_cells();
+
+        let bbox = BoundingBox::new([0.0, 0.0, 0.0], [1.0, 1.0, 1.0]);
+        let geom = Geometry::new(bbox, [1, 1, 1]);
+
+        assert_eq!(
+            get_global_id_from_phys(&forest, &geom, [0.5, 0.5, 0.5]),
+            Some(0)
+        );
+    }
+
+    #[test]
+    fn returns_none_outside_bbox() {
+        let mut forest = Forest::new([1, 1, 1]);
+        forest.populate_root_cells();
+
+        let bbox = BoundingBox::new([0.0, 0.0, 0.0], [1.0, 1.0, 1.0]);
+        let geom = Geometry::new(bbox, [1, 1, 1]);
+
+        assert_eq!(get_global_id_from_phys(&forest, &geom, [-0.1, 0.5, 0.5]), None);
+        assert_eq!(get_global_id_from_phys(&forest, &geom, [1.1, 0.5, 0.5]), None);
+    }
+}

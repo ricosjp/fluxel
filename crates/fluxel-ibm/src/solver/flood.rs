@@ -67,3 +67,45 @@ pub fn flood_fill_inside_outside(
 
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use fluxel_geometry::BoundingBox;
+
+    #[test]
+    fn err_when_seed_outside_domain() {
+        let mut forest = Forest::new([1, 1, 1]);
+        forest.populate_root_cells();
+        let bbox = BoundingBox::new([0.0, 0.0, 0.0], [1.0, 1.0, 1.0]);
+        let geom = Geometry::new(bbox, [1, 1, 1]);
+        let mut types = vec![CellType::Solid];
+
+        let err = flood_fill_inside_outside(&forest, &geom, &mut types, [2.0, 0.5, 0.5])
+            .unwrap_err();
+        assert!(err.contains("outside"));
+    }
+
+    #[test]
+    fn err_when_seed_on_intersect_cell() {
+        let mut forest = Forest::new([1, 1, 1]);
+        forest.populate_root_cells();
+        let bbox = BoundingBox::new([0.0, 0.0, 0.0], [1.0, 1.0, 1.0]);
+        let geom = Geometry::new(bbox, [1, 1, 1]);
+        let mut types = vec![CellType::Intersect];
+
+        assert!(flood_fill_inside_outside(&forest, &geom, &mut types, [0.5, 0.5, 0.5]).is_err());
+    }
+
+    #[test]
+    fn fills_single_solid_cell_from_interior_seed() {
+        let mut forest = Forest::new([1, 1, 1]);
+        forest.populate_root_cells();
+        let bbox = BoundingBox::new([0.0, 0.0, 0.0], [1.0, 1.0, 1.0]);
+        let geom = Geometry::new(bbox, [1, 1, 1]);
+        let mut types = vec![CellType::Solid];
+
+        flood_fill_inside_outside(&forest, &geom, &mut types, [0.5, 0.5, 0.5]).unwrap();
+        assert_eq!(types[0], CellType::Fluid);
+    }
+}

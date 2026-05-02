@@ -145,3 +145,41 @@ pub fn build_axis_projected_mesh(
 
     mesh
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use fluxel_geometry::BoundingBox;
+    use fluxel_ibm::mesh::IBMMesh;
+
+    fn two_cell_setup() -> (Forest, Geometry, IBMMesh) {
+        let mut forest = Forest::new([2, 1, 1]);
+        forest.populate_root_cells();
+
+        let bbox = BoundingBox::new([0.0, 0.0, 0.0], [1.0, 1.0, 1.0]);
+        let geom = Geometry::new(bbox, [2, 1, 1]);
+
+        let verts = [[10.0, 10.0, 10.0], [11.0, 10.0, 10.0], [10.0, 11.0, 10.0]];
+        let indices = [[0u32, 1, 2]];
+        let mesh = IBMMesh::from_vertices_indices_and_patches(
+            &verts,
+            &indices,
+            vec!["default".into()],
+            vec![0],
+        );
+        (forest, geom, mesh)
+    }
+
+    #[test]
+    fn axis_projected_all_fluid_sets_only_immersed_flags() {
+        let (forest, geom, ibm_mesh) = two_cell_setup();
+        let cell_types = vec![CellType::Fluid, CellType::Fluid];
+
+        let mesh = build_axis_projected_mesh(&forest, &geom, &ibm_mesh, &cell_types);
+
+        assert_eq!(mesh.n_cells, 2);
+        assert!(mesh.ap_dist_owner_to_bnd.is_empty());
+        assert_eq!(mesh.ap_is_immersed_face.iter().filter(|&&x| x).count(), 0);
+        assert!(!mesh.internal_faces_owner.is_empty());
+    }
+}

@@ -89,3 +89,44 @@ impl Direction {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn coordinate_type_default_is_cartesian() {
+        assert_eq!(CoordinateType::default(), CoordinateType::Cartesian);
+    }
+
+    #[test]
+    fn axis_as_index_and_split() {
+        assert_eq!(Axis::X.as_index(), 0);
+        assert_eq!(Axis::Y.as_index(), 1);
+        assert_eq!(Axis::Z.as_index(), 2);
+
+        assert_eq!(
+            Axis::X.split_into_directions(),
+            (Direction::XMinus, Direction::XPlus)
+        );
+        assert_eq!(
+            Axis::Y.split_into_directions(),
+            (Direction::YMinus, Direction::YPlus)
+        );
+        assert_eq!(
+            Axis::Z.split_into_directions(),
+            (Direction::ZMinus, Direction::ZPlus)
+        );
+    }
+
+    #[test]
+    fn direction_axis_opposite_sign() {
+        for d in Direction::ALL {
+            assert_eq!(d.opposite().opposite(), d);
+            assert_eq!(d.axis(), d.opposite().axis());
+            assert_eq!(d.sign(), -d.opposite().sign());
+        }
+        assert_eq!(Direction::XMinus.sign(), -1);
+        assert_eq!(Direction::XPlus.sign(), 1);
+    }
+}

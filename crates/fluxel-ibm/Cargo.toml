@@ -19,3 +19,6 @@ nalgebra = "0.34.2"
 # IO libraries
 stl_io = "0.10.0"
 wavefront_obj = "11.0.0"
+
+[dev-dependencies]
+tempfile.workspace = true

@@ -110,3 +110,53 @@ pub fn build_ghost_cell_mesh(
 
     mesh
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use fluxel_geometry::BoundingBox;
+    use fluxel_ibm::mesh::IBMMesh;
+    use fluxel_ibm::types::GhostCellData;
+
+    fn two_cell_setup() -> (Forest, Geometry, IBMMesh) {
+        let mut forest = Forest::new([2, 1, 1]);
+        forest.populate_root_cells();
+
+        let bbox = BoundingBox::new([0.0, 0.0, 0.0], [1.0, 1.0, 1.0]);
+        let geom = Geometry::new(bbox, [2, 1, 1]);
+
+        let verts = [[10.0, 10.0, 10.0], [11.0, 10.0, 10.0], [10.0, 11.0, 10.0]];
+        let indices = [[0u32, 1, 2]];
+        let mesh = IBMMesh::from_vertices_indices_and_patches(
+            &verts,
+            &indices,
+            vec!["default".into()],
+            vec![0],
+        );
+        (forest, geom, mesh)
+    }
+
+    #[test]
+    fn ghost_cell_mesh_matches_cell_count_and_patch_names() {
+        let (forest, geom, ibm_mesh) = two_cell_setup();
+        let gc = GhostCellData {
+            gc_is_fluid: vec![false, true],
+            gc_cell_ids: vec![],
+            gc_bnd_anchor_ids: vec![],
+            gc_bnd_patch_ids: vec![],
+            gc_bnd_intercepts: vec![],
+            gc_image_points: vec![],
+            gc_interp_stencil_indices: vec![],
+            gc_interp_stencil_weights: vec![],
+        };
+
+        let mesh = build_ghost_cell_mesh(&forest, &geom, &ibm_mesh, gc);
+
+        assert_eq!(mesh.n_cells, 2);
+        assert_eq!(mesh.patch_names, ibm_mesh.patch_names);
+        assert_eq!(mesh.gc_is_fluid, vec![false, true]);
+        assert_eq!(mesh.cell_centers.len(), 2);
+        assert_eq!(mesh.cell_sizes.len(), 2);
+        assert!(!mesh.internal_faces_owner.is_empty());
+    }
+}

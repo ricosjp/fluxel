@@ -88,3 +88,30 @@ pub(crate) fn check_inside_parity_robust(p: &Vector, bvh: &parry3d_f64::shape::T
 
     inside_count >= 7
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::mesh::IBMMesh;
+    use fluxel_geometry::BoundingBox;
+
+    #[test]
+    fn mark_intersecting_marks_cell_with_surface_patch() {
+        let mut forest = Forest::new([2, 1, 1]);
+        forest.populate_root_cells();
+
+        let bbox = BoundingBox::new([0.0, 0.0, 0.0], [1.0, 1.0, 1.0]);
+        let geom = Geometry::new(bbox, [2, 1, 1]);
+
+        let verts = [[0.05, 0.05, 0.05], [0.2, 0.05, 0.05], [0.1, 0.2, 0.05]];
+        let indices = [[0u32, 1, 2]];
+        let mesh =
+            IBMMesh::from_vertices_indices_and_patches(&verts, &indices, vec!["t".into()], vec![0]);
+
+        let types = mark_intersecting_cells(&forest, &geom, &mesh);
+        assert!(
+            types.contains(&CellType::Intersect),
+            "expected at least one intersecting cell"
+        );
+    }
+}

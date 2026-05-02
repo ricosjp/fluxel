@@ -143,3 +143,23 @@ impl IBMMesh {
         ))
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn from_vertices_builds_bvh_and_patch_map() {
+        let verts = [[0.0f64, 0.0, 0.0], [1.0, 0.0, 0.0], [0.0, 1.0, 0.0]];
+        let indices = [[0u32, 1, 2]];
+        let mesh = IBMMesh::from_vertices_indices_and_patches(
+            &verts,
+            &indices,
+            vec!["a".into(), "b".into()],
+            vec![0],
+        );
+        assert_eq!(mesh.patch_names.len(), 2);
+        assert_eq!(mesh.anchor_to_patch_id.len(), 1);
+        assert_eq!(mesh.bvh.indices().len(), 1);
+    }
+}
