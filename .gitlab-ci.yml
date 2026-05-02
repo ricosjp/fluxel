@@ -16,7 +16,7 @@ default:
     - apt install -y build-essential curl
     - curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
     - source ~/.cargo/env
-    - cargo install cargo-nextest cargo-llvm-cov --locked
+    - cargo install cargo-llvm-cov --locked
 
 lint:
   stage: test
@@ -30,7 +30,23 @@ pytest:
   stage: test
   script:
     - uv sync --group test
-    - make test
+    - cargo llvm-cov show-env --sh > .llvm-cov-env
+    - . ./.llvm-cov-env
+    - cargo llvm-cov clean --workspace
+    - cargo test
+    - uv run -- maturin develop --uv
+    - uv run -- pytest tests --cov=src --cov-report xml
+    - cargo llvm-cov report --cobertura --output-path coverage.xml
+    - cargo llvm-cov report --html --output-dir htmlcov/index.html
+  coverage: '/TOTAL.*? (100(?:\.0+)?\%|[1-9]?\d(?:\.\d+)?\%)$/'
+  artifacts:
+    reports:
+      coverage_report:
+        coverage_format: cobertura
+        path: coverage.xml
+    paths:
+      - htmlcov/
+      - coverage.xml
   tags:
     - no-gpu
     - GenuineIntel

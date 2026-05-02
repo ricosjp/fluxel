@@ -28,6 +28,7 @@ examples = [
 ]
 test = [
     "pytest",
+    "pytest-cov",
     "pytest-benchmark",
 ]
 lint = ["ruff"]
@@ -40,6 +41,25 @@ docs = [
     "sphinxcontrib-mermaid",
     "sphinx-codeautolink",
     "imageio",                            # gif animation
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = [
+    "benchmark: Run test with the --benchmark-autosave option",
+]
+addopts = [
+    "-m",
+    "not benchmark",
+]
+
+[tool.coverage.report]
+ignore_errors = false
+show_missing = true
+# Regexes for lines to exclude from consideration
+exclude_also = [
+    # Don't complain about abstract methods, they aren't run:
+    "@(abc\\.)?abstractmethod",
 ]
 
 [tool.maturin]
