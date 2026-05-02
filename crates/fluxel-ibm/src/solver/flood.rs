@@ -33,7 +33,9 @@ pub fn flood_fill_inside_outside(
 
     if let Some(seed_id) = get_global_id_from_phys(forest, geom, seed_pt) {
         if cell_types[seed_id] == CellType::Intersect {
-            return Err("指定されたシードポイント (fluid_seed_point) が壁面 (Intersectセル) 上にあります。流体領域の内部を明確に指定してください。".to_string());
+            return Err(
+                "The fluid seed point `fluid_seed_point` lies on an intersect (wall) cell; specify a seed clearly inside the fluid region.".to_string(),
+            );
         }
 
         let mut queue = VecDeque::new();
@@ -54,7 +56,10 @@ pub fn flood_fill_inside_outside(
             }
         }
     } else {
-        return Err("指定されたシードポイント (fluid_seed_point) が計算領域 (BoundingBox) の外部にあります。".to_string());
+        return Err(
+            "The fluid seed point `fluid_seed_point` lies outside the computational domain (bounding box)."
+                .to_string(),
+        );
     }
     visited
         .iter()
