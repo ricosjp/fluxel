@@ -23,4 +23,3 @@ def test_fluxel_module_exports_core_classes() -> None:
         "Forest",
     ):
         assert hasattr(fluxel, name), f"missing {name}"
-
