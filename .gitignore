@@ -171,6 +171,7 @@ tests/outputs
 
 # Rust
 Cargo.lock
+*.profraw
 
 # Misc
 *~
