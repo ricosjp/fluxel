@@ -9,6 +9,8 @@ from typing import Protocol, runtime_checkable
 
 import numpy as np
 
+RefinementRegion = tuple[list[float], list[float], int]
+
 class BoundingBox:
     """
     Physical bounding box of the computational domain.
@@ -301,6 +303,7 @@ class FluxelManager:
         mesh_path: str | None,
         target_level: int,
         fluid_seed_point: list[float],
+        refinement_regions: list[RefinementRegion] | None = None,
     ) -> CfdGhostCellMesh:
         """
         Builds a CFD mesh
@@ -319,6 +322,10 @@ class FluxelManager:
             The maximum octree refinement level around the input surface.
         fluid_seed_point : list of float
             The point in the physical domain to seed the fluid region.
+        refinement_regions : list of tuple[list[float], list[float], int] | None
+            Optional region refinement requests as ``(min, max, level)``.
+            Cells whose AABB intersects a region are refined up to ``level``
+            before 2:1 balancing and final uniform leaf refinement.
 
         Returns
         -------
@@ -334,7 +341,10 @@ class FluxelManager:
         ...
 
     def build_axis_projected_mesh(
-        self, mesh_path: str | None, target_level: int
+        self,
+        mesh_path: str | None,
+        target_level: int,
+        refinement_regions: list[RefinementRegion] | None = None,
     ) -> CfdAxisProjectedMesh:
         """
         Builds a CFD mesh
@@ -352,6 +362,10 @@ class FluxelManager:
             Specifying None will generate a mesh without immersed boundary.
         target_level : int
             The maximum octree refinement level around the input surface.
+        refinement_regions : list of tuple[list[float], list[float], int] | None
+            Optional region refinement requests as ``(min, max, level)``.
+            Cells whose AABB intersects a region are refined up to ``level``
+            before 2:1 balancing and final uniform leaf refinement.
 
         Returns
         -------

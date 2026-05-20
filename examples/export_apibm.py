@@ -15,7 +15,7 @@ from typing import Literal
 import numpy as np
 import pyvista as pv
 import yaml
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 from fluxel import (
     Axis,
@@ -29,8 +29,51 @@ from fluxel import (
 class BoundingBoxConfig(BaseModel, frozen=True):
     """Axis-aligned domain bounding box (min / max corners)."""
 
-    min: list[float, float, float]
-    max: list[float, float, float]
+    min: list[float]
+    max: list[float]
+
+
+class RefinementRegionConfig(BaseModel, frozen=True):
+    name: str | None = None
+    """
+    name : str | None
+        Optional label for this local refinement region.
+    """
+    min: list[float]
+    """
+    min : list[float, float, float]
+        Lower corner of the axis-aligned refinement box.
+    """
+    max: list[float]
+    """
+    max : list[float, float, float]
+        Upper corner of the axis-aligned refinement box.
+    """
+    level: int
+    """
+    level : int
+        Target octree refinement level for cells intersecting this box.
+    """
+
+    @field_validator("min", "max")
+    @classmethod
+    def validate_corner(cls, value: list[float]) -> list[float]:
+        if len(value) != 3:
+            raise ValueError("refinement region corners must have 3 values")
+        return value
+
+    @field_validator("level")
+    @classmethod
+    def validate_level(cls, value: int) -> int:
+        if value < 0:
+            raise ValueError("refinement region level must be non-negative")
+        return value
+
+    @model_validator(mode="after")
+    def validate_bounds(self) -> "RefinementRegionConfig":
+        if any(lo >= hi for lo, hi in zip(self.min, self.max, strict=True)):
+            raise ValueError("refinement region min must be less than max")
+        return self
 
 
 class ApibmExportConfig(BaseModel, frozen=True):
@@ -42,8 +85,11 @@ class ApibmExportConfig(BaseModel, frozen=True):
     )
     target_level: int = 3
     n_leaf_refinement: int = 3
-    base_resolution: list[int, int, int]
+    base_resolution: list[int]
     bounding_box: BoundingBoxConfig = Field(default_factory=BoundingBoxConfig)
+    refinement_regions: list[RefinementRegionConfig] = Field(
+        default_factory=list
+    )
 
     @field_validator("input_mesh", mode="after")
     @classmethod
@@ -58,9 +104,7 @@ class ApibmExportConfig(BaseModel, frozen=True):
 
     @field_validator("base_resolution", mode="after")
     @classmethod
-    def _validate_base_resolution(
-        cls, v: list[int, int, int]
-    ) -> list[int, int, int]:
+    def _validate_base_resolution(cls, v: list[int]) -> list[int]:
         for n in v:
             if n < 1:
                 msg = "base_resolution entries must be positive integers"
@@ -450,6 +494,10 @@ if __name__ == "__main__":
     n_leaf_refinement = cfg.n_leaf_refinement
     mesh_path = cfg.input_mesh
     output_path = cfg.output_vtu
+    refinement_regions = [
+        (region.min, region.max, region.level)
+        for region in cfg.refinement_regions
+    ]
 
     print(f"Config file: {args.config.resolve()}")
     print(f"Domain Bounds: Min {bbox.min} Max {bbox.max}")
@@ -458,6 +506,7 @@ if __name__ == "__main__":
     print(f"Number of Leaf Refinements: {n_leaf_refinement}")
     print(f"Input Mesh File: {mesh_path}")
     print(f"Output VTU File: {output_path}")
+    print(f"Refinement regions: {refinement_regions}")
 
     # 2. FluxelManager の初期化
     manager = FluxelManager(
@@ -470,7 +519,7 @@ if __name__ == "__main__":
     print("\n Starting mesh generation...")
     t0 = time.time()
     mesh = manager.build_axis_projected_mesh(
-        str(mesh_path), target_level=target_level
+        str(mesh_path), target_level, refinement_regions
     )
     t1 = time.time()
     print(f"Mesh generation completed in {t1 - t0:.2f} seconds")
