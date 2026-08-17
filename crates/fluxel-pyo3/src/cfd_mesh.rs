@@ -1,6 +1,7 @@
 //! Python-facing CFD mesh SoA types (GCIBM / APIBM).
 
 use crate::conversion::{vec_k_to_py2, vec_to_py1};
+use fluxel_export::ApIbmFaceData as CoreApIbmFaceData;
 use fluxel_export::CfdAxisProjectedMesh as CoreCfdAxisProjectedMesh;
 use fluxel_export::CfdGhostCellMesh as CoreCfdGhostCellMesh;
 use numpy::{PyArray1, PyArray2};
@@ -104,6 +105,36 @@ impl CfdGhostCellMesh {
     }
 }
 
+/// Compressed APIBM immersed-boundary face payload.
+#[pyclass(get_all)]
+pub struct ApIbmFaceData {
+    pub is_immersed_face: Py<PyArray1<bool>>,
+    pub dist_owner_to_bnd: Py<PyArray1<f64>>,
+    pub dist_neighbour_to_bnd: Py<PyArray1<f64>>,
+    pub owner_weights: Py<PyArray2<f64>>,
+    pub neighbour_weights: Py<PyArray2<f64>>,
+    pub owner_bnd_anchor_id: Py<PyArray1<usize>>,
+    pub owner_bnd_patch_id: Py<PyArray1<usize>>,
+    pub neighbour_bnd_anchor_id: Py<PyArray1<usize>>,
+    pub neighbour_bnd_patch_id: Py<PyArray1<usize>>,
+}
+
+impl ApIbmFaceData {
+    pub fn from_core(py: Python<'_>, ap: CoreApIbmFaceData) -> Self {
+        Self {
+            is_immersed_face: vec_to_py1(py, ap.is_immersed_face),
+            dist_owner_to_bnd: vec_to_py1(py, ap.dist_owner_to_bnd),
+            dist_neighbour_to_bnd: vec_to_py1(py, ap.dist_neighbour_to_bnd),
+            owner_weights: vec_k_to_py2::<f64, 2>(py, ap.owner_weights),
+            neighbour_weights: vec_k_to_py2::<f64, 2>(py, ap.neighbour_weights),
+            owner_bnd_anchor_id: vec_to_py1(py, ap.owner_bnd_anchor_id),
+            owner_bnd_patch_id: vec_to_py1(py, ap.owner_bnd_patch_id),
+            neighbour_bnd_anchor_id: vec_to_py1(py, ap.neighbour_bnd_anchor_id),
+            neighbour_bnd_patch_id: vec_to_py1(py, ap.neighbour_bnd_patch_id),
+        }
+    }
+}
+
 /// SoA mesh layout for APIBM (Axis-Projected Immersed Boundary Method).
 #[pyclass(get_all)]
 pub struct CfdAxisProjectedMesh {
@@ -120,15 +151,7 @@ pub struct CfdAxisProjectedMesh {
     pub domain_bnd_faces_owner: Py<PyArray1<usize>>,
     pub domain_bnd_faces_dir: Py<PyArray1<u8>>,
 
-    pub ap_is_immersed_face: Py<PyArray1<bool>>,
-    pub ap_dist_owner_to_bnd: Py<PyArray1<f64>>,
-    pub ap_dist_neighbour_to_bnd: Py<PyArray1<f64>>,
-    pub ap_owner_weights: Py<PyArray2<f64>>,
-    pub ap_neighbour_weights: Py<PyArray2<f64>>,
-    pub ap_owner_bnd_anchor_id: Py<PyArray1<usize>>,
-    pub ap_owner_bnd_patch_id: Py<PyArray1<usize>>,
-    pub ap_neighbour_bnd_anchor_id: Py<PyArray1<usize>>,
-    pub ap_neighbour_bnd_patch_id: Py<PyArray1<usize>>,
+    pub ap: Py<ApIbmFaceData>,
 }
 
 impl CfdAxisProjectedMesh {
@@ -139,6 +162,8 @@ impl CfdAxisProjectedMesh {
                 .set_item(patch_name, index)
                 .expect("failed to set patch_name_to_id");
         }
+
+        let ap = ApIbmFaceData::from_core(py, core_mesh.ap);
 
         Self {
             n_cells: core_mesh.n_cells,
@@ -168,15 +193,7 @@ impl CfdAxisProjectedMesh {
                     .collect(),
             ),
 
-            ap_is_immersed_face: vec_to_py1(py, core_mesh.ap_is_immersed_face),
-            ap_dist_owner_to_bnd: vec_to_py1(py, core_mesh.ap_dist_owner_to_bnd),
-            ap_dist_neighbour_to_bnd: vec_to_py1(py, core_mesh.ap_dist_neighbour_to_bnd),
-            ap_owner_weights: vec_k_to_py2::<f64, 2>(py, core_mesh.ap_owner_weights),
-            ap_neighbour_weights: vec_k_to_py2::<f64, 2>(py, core_mesh.ap_neighbour_weights),
-            ap_owner_bnd_anchor_id: vec_to_py1(py, core_mesh.ap_owner_bnd_anchor_id),
-            ap_owner_bnd_patch_id: vec_to_py1(py, core_mesh.ap_owner_bnd_patch_id),
-            ap_neighbour_bnd_anchor_id: vec_to_py1(py, core_mesh.ap_neighbour_bnd_anchor_id),
-            ap_neighbour_bnd_patch_id: vec_to_py1(py, core_mesh.ap_neighbour_bnd_patch_id),
+            ap: Py::new(py, ap).expect("failed to allocate ApIbmFaceData"),
         }
     }
 }

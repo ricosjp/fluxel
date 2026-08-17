@@ -19,6 +19,8 @@ def test_fluxel_module_exports_core_classes() -> None:
         "BoundingBox",
         "CfdGhostCellMesh",
         "CfdAxisProjectedMesh",
+        "ApIbmFaceData",
+        "ApibmSession",
         "FluxelManager",
         "Forest",
     ):

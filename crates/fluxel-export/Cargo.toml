@@ -8,4 +8,5 @@ authors.workspace = true
 fluxel-core = { path = "../fluxel-core" }
 fluxel-geometry = { path = "../fluxel-geometry" }
 fluxel-ibm = { path = "../fluxel-ibm" }
+parry3d-f64.workspace = true
 rayon.workspace = true

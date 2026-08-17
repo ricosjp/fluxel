@@ -6,11 +6,14 @@
 mod cfd_mesh;
 mod conversion;
 mod forest;
+mod pipeline;
+mod apibm_session;
 mod manager;
 
 use pyo3::prelude::*;
 
-use cfd_mesh::{BoundingBox, CfdAxisProjectedMesh, CfdGhostCellMesh};
+use apibm_session::ApibmSession;
+use cfd_mesh::{ApIbmFaceData, BoundingBox, CfdAxisProjectedMesh, CfdGhostCellMesh};
 use forest::Forest;
 use manager::FluxelManager;
 
@@ -20,7 +23,9 @@ use manager::FluxelManager;
 fn fluxel(_py: Python<'_>, m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<BoundingBox>()?;
     m.add_class::<CfdGhostCellMesh>()?;
+    m.add_class::<ApIbmFaceData>()?;
     m.add_class::<CfdAxisProjectedMesh>()?;
+    m.add_class::<ApibmSession>()?;
     m.add_class::<FluxelManager>()?;
     m.add_class::<Forest>()?;
     Ok(())

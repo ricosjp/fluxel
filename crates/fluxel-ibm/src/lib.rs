@@ -5,9 +5,11 @@
 //! and ghost-cell geometry construction.
 
 pub mod mesh;
+pub mod pose;
 pub mod solver;
 pub mod types;
 
 pub use mesh::IBMMesh;
+pub use pose::pose_from_translation_quaternion;
 pub use solver::{mark_intersecting_cells, resolve_apibm_face};
 pub use types::*;

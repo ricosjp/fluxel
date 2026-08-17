@@ -160,6 +160,35 @@ class CfdGhostCellMesh(ICfdMesh):
     @property
     def gc_interp_stencil_weights(self) -> np.ndarray: ...
 
+class ApIbmFaceData:
+    """
+    Compressed axis-projected immersed-boundary payload for internal faces.
+
+    `is_immersed_face` has length ``N_internal_faces``. All other arrays are
+    compressed to ``N_immersed = count(is_immersed_face)`` and store data only
+    for immersed faces, in the same order as ``True`` entries in
+    `is_immersed_face`.
+    """
+
+    @property
+    def is_immersed_face(self) -> np.ndarray: ...
+    @property
+    def dist_owner_to_bnd(self) -> np.ndarray: ...
+    @property
+    def dist_neighbour_to_bnd(self) -> np.ndarray: ...
+    @property
+    def owner_weights(self) -> np.ndarray: ...
+    @property
+    def neighbour_weights(self) -> np.ndarray: ...
+    @property
+    def owner_bnd_anchor_id(self) -> np.ndarray: ...
+    @property
+    def owner_bnd_patch_id(self) -> np.ndarray: ...
+    @property
+    def neighbour_bnd_anchor_id(self) -> np.ndarray: ...
+    @property
+    def neighbour_bnd_patch_id(self) -> np.ndarray: ...
+
 class CfdAxisProjectedMesh(ICfdMesh):
     """
     Structure of Arrays (SoA) mesh representation for CFD solvers
@@ -199,38 +228,8 @@ class CfdAxisProjectedMesh(ICfdMesh):
         Array of shape (N_domain_bnd_faces,) dtype=uint8
         the direction of the domain boundary faces.
         0: -X, 1: +X, 2: -Y, 3: +Y, 4: -Z, 5: +Z
-
-    [Axis-Projected IBM Specific Data]
-    ap_is_immersed_face : numpy.ndarray
-        Array of shape (N_internal_faces,) dtype=bool
-        a boolean flag indicating
-        whether each internal face intersects the immersed boundary.
-    ap_dist_owner_to_bnd : numpy.ndarray
-        Array of shape (N_internal_faces,) dtype=float64
-        the distance from the owner cell center
-        to the boundary intersection point along each axis.
-    ap_dist_neighbour_to_bnd : numpy.ndarray
-        Array of shape (N_internal_faces,) dtype=float64
-        the distance from the neighbour cell center
-        to the boundary intersection point along each axis.
-    ap_owner_weights : numpy.ndarray
-        Array of shape (Nx_faces_with_bnd, 2) dtype=float64
-        APIBM reconstruction weights for the owner side on each axis.
-    ap_neighbour_weights : numpy.ndarray
-        Array of shape (N_internal_faces, 2) dtype=float64
-        APIBM reconstruction weights for the neighbour side on each axis.
-    ap_owner_bnd_anchor_id : numpy.ndarray
-        Array of shape (N_internal_faces,) dtype=uint64
-        the boundary anchor id for owner side of each axis.
-    ap_owner_bnd_patch_id : numpy.ndarray
-        Array of shape (N_internal_faces,) dtype=uint64
-        the boundary patch id for owner side of each axis.
-    ap_neighbour_bnd_anchor_id : numpy.ndarray
-        Array of shape (N_internal_faces,) dtype=uint64
-        the boundary anchor id for neighbour side of each axis.
-    ap_neighbour_bnd_patch_id : numpy.ndarray
-        Array of shape (N_internal_faces,) dtype=uint64
-        the boundary patch id for neighbour side of each axis.
+    ap : ApIbmFaceData
+        Axis-projected immersed-boundary face payload.
     """
 
     @property
@@ -254,23 +253,7 @@ class CfdAxisProjectedMesh(ICfdMesh):
     @property
     def domain_bnd_faces_dir(self) -> np.ndarray: ...
     @property
-    def ap_is_immersed_face(self) -> np.ndarray: ...
-    @property
-    def ap_dist_owner_to_bnd(self) -> np.ndarray: ...
-    @property
-    def ap_dist_neighbour_to_bnd(self) -> np.ndarray: ...
-    @property
-    def ap_owner_weights(self) -> np.ndarray: ...
-    @property
-    def ap_neighbour_weights(self) -> np.ndarray: ...
-    @property
-    def ap_owner_bnd_anchor_id(self) -> np.ndarray: ...
-    @property
-    def ap_owner_bnd_patch_id(self) -> np.ndarray: ...
-    @property
-    def ap_neighbour_bnd_anchor_id(self) -> np.ndarray: ...
-    @property
-    def ap_neighbour_bnd_patch_id(self) -> np.ndarray: ...
+    def ap(self) -> ApIbmFaceData: ...
 
 class FluxelManager:
     """
@@ -371,6 +354,124 @@ class FluxelManager:
         -------
         CfdAxisProjectedMesh
             The generated SoA mesh ready for CFD solvers.
+        """
+        ...
+
+    def create_axis_projected_session(
+        self,
+        mesh_path: str | None,
+        target_level: int,
+        refinement_regions: list[RefinementRegion] | None = None,
+    ) -> ApibmSession:
+        """
+        Creates a stateful APIBM session that retains the background forest
+        for rigid moving-boundary updates via ``update_ib`` / ``remesh``.
+
+        Parameters
+        ----------
+        mesh_path : str | None
+            Path to the input STL / OBJ geometry file.
+            Specifying None will generate a mesh without immersed boundary.
+        target_level : int
+            The maximum octree refinement level around the input surface.
+        refinement_regions : list of tuple[list[float], list[float], int] | None
+            Optional region refinement requests as ``(min, max, level)``.
+            Cells whose AABB intersects a region are refined up to ``level``
+            before 2:1 balancing and final uniform leaf refinement.
+
+        Returns
+        -------
+        ApibmSession
+            Session holding the forest, IBM geometry, and current CFD mesh.
+        """
+        ...
+
+class ApibmSession:
+    """
+    Stateful APIBM session for rigid immersed-boundary motion.
+
+    Keep this object alive across timesteps. Use ``update_ib`` when the
+    background mesh can stay fixed, and ``remesh`` when AMR should follow
+    the boundary.
+
+    Attributes
+    ----------
+    mesh : CfdAxisProjectedMesh
+        Current CFD mesh snapshot (a new Python object on each access).
+    translation : list of float
+        Current rigid translation ``[tx, ty, tz]`` applied to the IB mesh.
+    rotation_quaternion : list of float
+        Current rigid rotation as a unit quaternion ``[w, x, y, z]``.
+    """
+
+    @property
+    def mesh(self) -> CfdAxisProjectedMesh: ...
+    @property
+    def translation(self) -> list[float]: ...
+    @property
+    def rotation_quaternion(self) -> list[float]: ...
+    def update_ib(
+        self,
+        translation: list[float] | None = None,
+        rotation_quaternion: list[float] | None = None,
+        warn_outside_refinement: bool = True,
+    ) -> CfdAxisProjectedMesh:
+        """
+        Recomputes IB face data only (topology fixed).
+
+        Pose arguments are absolute. Quaternion order is ``[w, x, y, z]``.
+        Omitted components keep the current pose values.
+
+        Parameters
+        ----------
+        translation : list of float or None
+            Absolute translation ``[tx, ty, tz]``. ``None`` keeps the current
+            translation.
+        rotation_quaternion : list of float or None
+            Absolute unit quaternion ``[w, x, y, z]``. ``None`` keeps the
+            current rotation.
+        warn_outside_refinement : bool, default True
+            If True, warn when the IB intersects cells below ``target_level``.
+
+        Returns
+        -------
+        CfdAxisProjectedMesh
+            Updated mesh snapshot with rebuilt immersed-boundary payload.
+        """
+        ...
+
+    def remesh(
+        self,
+        target_level: int | None = None,
+        refinement_regions: list[RefinementRegion] | None = None,
+        translation: list[float] | None = None,
+        rotation_quaternion: list[float] | None = None,
+        warn_outside_refinement: bool = True,
+    ) -> CfdAxisProjectedMesh:
+        """
+        Rebuilds the AMR background mesh and IB payload for the current pose.
+
+        Parameters
+        ----------
+        target_level : int or None
+            New maximum octree refinement level around the surface.
+            ``None`` keeps the current target level.
+        refinement_regions : list of tuple[list[float], list[float], int] | None
+            Optional region refinement requests as ``(min, max, level)``.
+            ``None`` keeps the current region list.
+        translation : list of float or None
+            Absolute translation ``[tx, ty, tz]``. ``None`` keeps the current
+            translation.
+        rotation_quaternion : list of float or None
+            Absolute unit quaternion ``[w, x, y, z]``. ``None`` keeps the
+            current rotation.
+        warn_outside_refinement : bool, default True
+            If True, warn when the IB intersects cells below ``target_level``.
+
+        Returns
+        -------
+        CfdAxisProjectedMesh
+            Newly built mesh snapshot after AMR and IB reconstruction.
         """
         ...
 

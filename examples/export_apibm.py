@@ -243,6 +243,9 @@ def export_axis_projected_polylines(
     neighbour_bnd_anchor_id = neighbour_bnd_anchor_id
     owner_bnd_patch_id = owner_bnd_patch_id
     neighbour_bnd_patch_id = neighbour_bnd_patch_id
+    if n_hit == 0:
+        print(f"Skip {axis} polylines (no immersed faces on this axis)")
+        return
     if n_hit != len(owner_bnd_anchor_id) or n_hit != len(
         neighbour_bnd_anchor_id
     ):
@@ -332,20 +335,20 @@ def _axis_internal_mesh_slice(
     """Return per-axis interior-face arrays (same order as the Rust builder)."""
     mask_for_n_faces = mesh.internal_faces_axis == axis.value
     mask_for_n_immersed_faces = (
-        mesh.internal_faces_axis[mesh.ap_is_immersed_face] == axis.value
+        mesh.internal_faces_axis[mesh.ap.is_immersed_face] == axis.value
     )
     return (
         mesh.internal_faces_owner[mask_for_n_faces],
         mesh.internal_faces_neighbour[mask_for_n_faces],
-        mesh.ap_is_immersed_face[mask_for_n_faces],
-        mesh.ap_dist_owner_to_bnd[mask_for_n_immersed_faces],
-        mesh.ap_dist_neighbour_to_bnd[mask_for_n_immersed_faces],
-        mesh.ap_owner_weights[mask_for_n_immersed_faces],
-        mesh.ap_neighbour_weights[mask_for_n_immersed_faces],
-        mesh.ap_owner_bnd_anchor_id[mask_for_n_immersed_faces],
-        mesh.ap_neighbour_bnd_anchor_id[mask_for_n_immersed_faces],
-        mesh.ap_owner_bnd_patch_id[mask_for_n_immersed_faces],
-        mesh.ap_neighbour_bnd_patch_id[mask_for_n_immersed_faces],
+        mesh.ap.is_immersed_face[mask_for_n_faces],
+        mesh.ap.dist_owner_to_bnd[mask_for_n_immersed_faces],
+        mesh.ap.dist_neighbour_to_bnd[mask_for_n_immersed_faces],
+        mesh.ap.owner_weights[mask_for_n_immersed_faces],
+        mesh.ap.neighbour_weights[mask_for_n_immersed_faces],
+        mesh.ap.owner_bnd_anchor_id[mask_for_n_immersed_faces],
+        mesh.ap.neighbour_bnd_anchor_id[mask_for_n_immersed_faces],
+        mesh.ap.owner_bnd_patch_id[mask_for_n_immersed_faces],
+        mesh.ap.neighbour_bnd_patch_id[mask_for_n_immersed_faces],
     )
 
 
@@ -369,15 +372,15 @@ def export_apibm_debug_data(
         internal_faces_axis=mesh.internal_faces_axis,
         domain_bnd_faces_owner=mesh.domain_bnd_faces_owner,
         domain_bnd_faces_dir=mesh.domain_bnd_faces_dir,
-        ap_is_immersed_face=mesh.ap_is_immersed_face,
-        ap_dist_owner_to_bnd=mesh.ap_dist_owner_to_bnd,
-        ap_dist_neighbour_to_bnd=mesh.ap_dist_neighbour_to_bnd,
-        ap_owner_weights=mesh.ap_owner_weights,
-        ap_neighbour_weights=mesh.ap_neighbour_weights,
-        ap_owner_bnd_anchor_id=mesh.ap_owner_bnd_anchor_id,
-        ap_neighbour_bnd_anchor_id=mesh.ap_neighbour_bnd_anchor_id,
-        ap_owner_bnd_patch_id=mesh.ap_owner_bnd_patch_id,
-        ap_neighbour_bnd_patch_id=mesh.ap_neighbour_bnd_patch_id,
+        ap_is_immersed_face=mesh.ap.is_immersed_face,
+        ap_dist_owner_to_bnd=mesh.ap.dist_owner_to_bnd,
+        ap_dist_neighbour_to_bnd=mesh.ap.dist_neighbour_to_bnd,
+        ap_owner_weights=mesh.ap.owner_weights,
+        ap_neighbour_weights=mesh.ap.neighbour_weights,
+        ap_owner_bnd_anchor_id=mesh.ap.owner_bnd_anchor_id,
+        ap_neighbour_bnd_anchor_id=mesh.ap.neighbour_bnd_anchor_id,
+        ap_owner_bnd_patch_id=mesh.ap.owner_bnd_patch_id,
+        ap_neighbour_bnd_patch_id=mesh.ap.neighbour_bnd_patch_id,
     )
     print(f"Saved debug arrays to {output_prefix}.npz")
     for axis_name, axis in (("x", Axis.X), ("y", Axis.Y), ("z", Axis.Z)):
@@ -413,9 +416,25 @@ def export_apibm_debug_data(
 
 
 def bnd_type_for_axis(mesh: CfdAxisProjectedMesh, axis: Axis) -> np.ndarray:
+    """
+    Mark cells that own or neighbour an immersed face on ``axis``.
+
+    Parameters
+    ----------
+    mesh : CfdAxisProjectedMesh
+        Mesh whose immersed faces are classified.
+    axis : Axis
+        Face-normal axis to inspect.
+
+    Returns
+    -------
+    numpy.ndarray
+        Integer array of length ``n_cells``. ``-1`` marks owner cells of
+        immersed faces, ``1`` marks neighbour cells, and ``0`` is unmarked.
+    """
     mask_for_n_faces = (
         mesh.internal_faces_axis == axis.value
-    ) & mesh.ap_is_immersed_face
+    ) & mesh.ap.is_immersed_face
     bt = np.zeros(mesh.n_cells, dtype=int)
     ow_m = mesh.internal_faces_owner[mask_for_n_faces]
     nb_m = mesh.internal_faces_neighbour[mask_for_n_faces]

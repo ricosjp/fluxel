@@ -4,6 +4,7 @@ use fluxel_core::Forest;
 use fluxel_geometry::{BoundingBox, Geometry};
 use fluxel_ibm::solver::{compute_ghost_cell_geometry, flood_fill_inside_outside, mark_intersecting_cells};
 use fluxel_ibm::IBMMesh;
+use parry3d_f64::math::Pose;
 
 fn unit_two_cell_setup() -> (Forest, Geometry, IBMMesh) {
     let mut forest = Forest::new([2, 1, 1]);
@@ -27,7 +28,7 @@ fn unit_two_cell_setup() -> (Forest, Geometry, IBMMesh) {
 fn ghost_geometry_after_flood_produces_consistent_gc_is_fluid() {
     let (forest, geom, ibm_mesh) = unit_two_cell_setup();
 
-    let mut cell_types = mark_intersecting_cells(&forest, &geom, &ibm_mesh);
+    let mut cell_types = mark_intersecting_cells(&forest, &geom, &ibm_mesh, &Pose::identity());
     flood_fill_inside_outside(&forest, &geom, &mut cell_types, [0.75, 0.5, 0.5]).unwrap();
 
     let gc = compute_ghost_cell_geometry(

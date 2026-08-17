@@ -219,7 +219,8 @@ pub fn compute_ghost_cell_geometry(
         fluid_seed_point[1],
         fluid_seed_point[2],
     );
-    let fluid_seed_is_inside = check_inside_parity_robust(&seed_pt, &mesh.bvh);
+    let identity = Pose::identity();
+    let fluid_seed_is_inside = check_inside_parity_robust(&seed_pt, &mesh.bvh, &identity);
 
     gc_is_fluid
         .par_iter_mut()
@@ -232,10 +233,9 @@ pub fn compute_ghost_cell_geometry(
             let logical = key.to_logical();
             let (c_arr, _) = geom.cell_bounds(&logical);
             let center = Vector::new(c_arr[0], c_arr[1], c_arr[2]);
-            let is_inside = check_inside_parity_robust(&center, &mesh.bvh);
+            let is_inside = check_inside_parity_robust(&center, &mesh.bvh, &identity);
             *slot = is_inside == fluid_seed_is_inside;
         });
-
     let rows: Vec<Option<GhostStencilRow>> = (0..total_cells)
         .into_par_iter()
         .map(|gid| try_build_ghost_stencil_row(gid, forest, geom, mesh, &gc_is_fluid))

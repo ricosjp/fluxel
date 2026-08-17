@@ -18,5 +18,8 @@ pyo3 = { version = "0.28.2", features = ["abi3-py39", "extension-module"] }
 # Threading libraries
 rayon.workspace = true
 
+# Spatial collision detection libraries
+parry3d-f64.workspace = true
+
 # NumPy bindings
 numpy = "0.28.0"

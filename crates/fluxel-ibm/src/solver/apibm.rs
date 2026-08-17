@@ -58,6 +58,7 @@ pub struct ApibmIntersection {
 /// * `axis` — Coordinate axis for this face: `0` = X, `1` = Y, `2` = Z. Rays are cast along
 ///   increasing coordinate from the owner and decreasing from the neighbour; the pair should match
 ///   the forest connectivity used for this face (e.g. `x_plus` neighbours along +X).
+/// * `pose` — Rigid transform applied to the immersed-boundary mesh.
 pub fn resolve_apibm_face(
     forest: &Forest,
     geom: &Geometry,
@@ -65,6 +66,7 @@ pub fn resolve_apibm_face(
     owner_global_id: usize,
     neighbour_global_id: usize,
     axis: Axis,
+    pose: &Pose,
 ) -> Option<ApibmIntersection> {
     let owner_side = resolve_owner_to_neighbour(
         forest,
@@ -73,6 +75,7 @@ pub fn resolve_apibm_face(
         owner_global_id,
         neighbour_global_id,
         axis,
+        pose,
     )?;
     let neighbour_side = resolve_neighbour_to_owner(
         forest,
@@ -81,6 +84,7 @@ pub fn resolve_apibm_face(
         owner_global_id,
         neighbour_global_id,
         axis,
+        pose,
     )?;
 
     Some(ApibmIntersection {
@@ -119,6 +123,7 @@ fn calc_axis_weights(d: f64, delta_x: f64) -> (f64, [f64; 2]) {
 /// # Arguments
 ///
 /// * `axis` — `0` = X, `1` = Y, `2` = Z.
+/// * `pose` — Rigid transform applied to the immersed-boundary mesh.
 pub fn resolve_owner_to_neighbour(
     forest: &Forest,
     geom: &Geometry,
@@ -126,6 +131,7 @@ pub fn resolve_owner_to_neighbour(
     owner_global_id: usize,
     neighbour_global_id: usize,
     axis: Axis,
+    pose: &Pose,
 ) -> Option<ApibmOneSideIntersection> {
     let o_logical = forest.keys()[owner_global_id].to_logical();
     let n_logical = forest.keys()[neighbour_global_id].to_logical();
@@ -143,9 +149,9 @@ pub fn resolve_owner_to_neighbour(
     let ray = Ray::new(center_o, dir_vec);
     let num_triangles = mesh.bvh.indices().len();
 
-    if let Some(intersection) =
-        mesh.bvh
-            .cast_ray_and_get_normal(&Pose::identity(), &ray, max_dist, false)
+    if let Some(intersection) = mesh
+        .bvh
+        .cast_ray_and_get_normal(pose, &ray, max_dist, false)
     {
         let toi = intersection.time_of_impact;
         let bnd_anchor_id = intersection.feature.unwrap_face() as usize % num_triangles;
@@ -177,6 +183,7 @@ pub fn resolve_owner_to_neighbour(
 /// # Arguments
 ///
 /// * `axis` — `0` = X, `1` = Y, `2` = Z.
+/// * `pose` — Rigid transform applied to the immersed-boundary mesh.
 pub fn resolve_neighbour_to_owner(
     forest: &Forest,
     geom: &Geometry,
@@ -184,6 +191,7 @@ pub fn resolve_neighbour_to_owner(
     owner_global_id: usize,
     neighbour_global_id: usize,
     axis: Axis,
+    pose: &Pose,
 ) -> Option<ApibmOneSideIntersection> {
     let o_logical = forest.keys()[owner_global_id].to_logical();
     let n_logical = forest.keys()[neighbour_global_id].to_logical();
@@ -201,9 +209,9 @@ pub fn resolve_neighbour_to_owner(
     let ray = Ray::new(center_n, dir_vec);
     let num_triangles = mesh.bvh.indices().len();
 
-    if let Some(intersection) =
-        mesh.bvh
-            .cast_ray_and_get_normal(&Pose::identity(), &ray, max_dist, false)
+    if let Some(intersection) = mesh
+        .bvh
+        .cast_ray_and_get_normal(pose, &ray, max_dist, false)
     {
         let toi = intersection.time_of_impact;
         let bnd_anchor_id = intersection.feature.unwrap_face() as usize % num_triangles;
@@ -266,13 +274,23 @@ mod tests {
     #[test]
     fn resolve_apibm_face_hits_plane_between_two_cells() {
         let (forest, geom, mesh) = setup_vertical_plane_between_cells();
+        let identity = Pose::identity();
 
-        let merged = resolve_apibm_face(&forest, &geom, &mesh, 0, 1, Axis::X);
+        let merged = resolve_apibm_face(&forest, &geom, &mesh, 0, 1, Axis::X, &identity);
         assert!(merged.is_some());
 
-        let o = resolve_owner_to_neighbour(&forest, &geom, &mesh, 0, 1, Axis::X);
-        let n = resolve_neighbour_to_owner(&forest, &geom, &mesh, 0, 1, Axis::X);
+        let o = resolve_owner_to_neighbour(&forest, &geom, &mesh, 0, 1, Axis::X, &identity);
+        let n = resolve_neighbour_to_owner(&forest, &geom, &mesh, 0, 1, Axis::X, &identity);
         assert!(o.is_some());
         assert!(n.is_some());
+    }
+
+    #[test]
+    fn resolve_apibm_face_respects_translation_pose() {
+        let (forest, geom, mesh) = setup_vertical_plane_between_cells();
+        // Move the plane far away so the face segment no longer hits.
+        let pose = Pose::translation(10.0, 0.0, 0.0);
+        let merged = resolve_apibm_face(&forest, &geom, &mesh, 0, 1, Axis::X, &pose);
+        assert!(merged.is_none());
     }
 }

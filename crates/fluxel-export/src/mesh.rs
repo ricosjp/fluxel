@@ -44,6 +44,24 @@ pub struct CfdGhostCellMesh {
     pub gc_interp_stencil_weights: Vec<[f64; 8]>,
 }
 
+/// Compressed axis-projected immersed-boundary payload for internal faces.
+///
+/// `is_immersed_face` has length `N_internal_faces`. All other fields are compressed to
+/// length `N_immersed = count(is_immersed_face)` and store data only for immersed faces,
+/// in the same order as `true` entries in `is_immersed_face`.
+#[derive(Debug, Default, Clone)]
+pub struct ApIbmFaceData {
+    pub is_immersed_face: Vec<bool>,
+    pub dist_owner_to_bnd: Vec<f64>,
+    pub dist_neighbour_to_bnd: Vec<f64>,
+    pub owner_weights: Vec<[f64; 2]>,
+    pub neighbour_weights: Vec<[f64; 2]>,
+    pub owner_bnd_anchor_id: Vec<usize>,
+    pub owner_bnd_patch_id: Vec<usize>,
+    pub neighbour_bnd_anchor_id: Vec<usize>,
+    pub neighbour_bnd_patch_id: Vec<usize>,
+}
+
 /// SoA mesh layout for APIBM (Axis-Projected Immersed Boundary Method).
 #[derive(Debug, Default, Clone)]
 pub struct CfdAxisProjectedMesh {
@@ -63,13 +81,5 @@ pub struct CfdAxisProjectedMesh {
     pub domain_bnd_faces_dir: Vec<Direction>,
 
     // --- APIBM-specific fields ---
-    pub ap_is_immersed_face: Vec<bool>,
-    pub ap_dist_owner_to_bnd: Vec<f64>,
-    pub ap_dist_neighbour_to_bnd: Vec<f64>,
-    pub ap_owner_weights: Vec<[f64; 2]>,
-    pub ap_neighbour_weights: Vec<[f64; 2]>,
-    pub ap_owner_bnd_anchor_id: Vec<usize>,
-    pub ap_owner_bnd_patch_id: Vec<usize>,
-    pub ap_neighbour_bnd_anchor_id: Vec<usize>,
-    pub ap_neighbour_bnd_patch_id: Vec<usize>,
+    pub ap: ApIbmFaceData,
 }
