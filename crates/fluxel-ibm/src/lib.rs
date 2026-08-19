@@ -10,6 +10,6 @@ pub mod solver;
 pub mod types;
 
 pub use mesh::IBMMesh;
-pub use pose::pose_from_translation_quaternion;
+pub use pose::{pose_from_translation_quaternion, quaternion_from_axis_angle};
 pub use solver::{mark_intersecting_cells, resolve_apibm_face};
 pub use types::*;

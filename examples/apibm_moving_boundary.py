@@ -7,11 +7,16 @@ Writes a VTU (plus APIBM debug artifacts) after each phase under
 
 from __future__ import annotations
 
-import math
 import pathlib
 import sys
 
-from fluxel import BoundingBox, CfdAxisProjectedMesh, FluxelManager
+from fluxel import (
+    Axis,
+    BoundingBox,
+    CfdAxisProjectedMesh,
+    FluxelManager,
+    quaternion_from_axis_angle,
+)
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 EXAMPLES = pathlib.Path(__file__).resolve().parent
@@ -104,12 +109,11 @@ def main() -> None:
     save_phase(mesh, "03_remesh_plus4")
 
     # Rotate 45 deg about y at the remeshed pose (topology fixed).
-    angle = math.radians(45.0)
-    qw = math.cos(angle / 2.0)
-    qy = math.sin(angle / 2.0)
     mesh = session.update_ib(
         translation=[4.0, 0.0, 0.0],
-        rotation_quaternion=[qw, 0.0, qy, 0.0],
+        rotation_quaternion=quaternion_from_axis_angle(
+            Axis.Y, 45.0, degrees=True
+        ),
         warn_outside_refinement=True,
     )
     n4 = int(mesh.ap.is_immersed_face.sum())

@@ -11,6 +11,10 @@ import numpy as np
 
 RefinementRegion = tuple[list[float], list[float], int]
 
+def _quaternion_from_axis_angle(
+    axis: list[float], angle: float
+) -> list[float]: ...
+
 class BoundingBox:
     """
     Physical bounding box of the computational domain.
@@ -421,6 +425,8 @@ class ApibmSession:
 
         Pose arguments are absolute. Quaternion order is ``[w, x, y, z]``.
         Omitted components keep the current pose values.
+        Use ``quaternion_from_axis_angle`` to build a quaternion from an
+        axis and angle.
 
         Parameters
         ----------
@@ -429,7 +435,8 @@ class ApibmSession:
             translation.
         rotation_quaternion : list of float or None
             Absolute unit quaternion ``[w, x, y, z]``. ``None`` keeps the
-            current rotation.
+            current rotation. Build from an axis and angle with
+            ``quaternion_from_axis_angle``.
         warn_outside_refinement : bool, default True
             If True, warn when the IB intersects cells below ``target_level``.
 
@@ -464,7 +471,8 @@ class ApibmSession:
             translation.
         rotation_quaternion : list of float or None
             Absolute unit quaternion ``[w, x, y, z]``. ``None`` keeps the
-            current rotation.
+            current rotation. Build from an axis and angle with
+            ``quaternion_from_axis_angle``.
         warn_outside_refinement : bool, default True
             If True, warn when the IB intersects cells below ``target_level``.
 

@@ -4,6 +4,7 @@ import numpy as np
 
 from ._fluxel import *
 from .enums import *
+from .pose import quaternion_from_axis_angle
 
 
 @runtime_checkable

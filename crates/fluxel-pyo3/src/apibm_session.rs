@@ -149,6 +149,7 @@ impl ApibmSession {
     ///
     /// `translation` and `rotation_quaternion` set the absolute rigid pose of the IB mesh
     /// (`[w, x, y, z]`). Defaults keep the current pose components when omitted.
+    /// Build the quaternion from an axis and angle with `quaternion_from_axis_angle`.
     #[pyo3(signature = (
         translation = None,
         rotation_quaternion = None,

@@ -7,7 +7,7 @@ import warnings
 import numpy as np
 import pytest
 
-from fluxel import BoundingBox, FluxelManager
+from fluxel import Axis, BoundingBox, FluxelManager, quaternion_from_axis_angle
 
 
 @pytest.fixture
@@ -53,3 +53,24 @@ def test_ap_payload_is_nested(manager: FluxelManager) -> None:
     assert hasattr(mesh, "ap")
     assert isinstance(mesh.ap.is_immersed_face, np.ndarray)
     assert len(mesh.ap.is_immersed_face) == len(mesh.internal_faces_owner)
+
+
+def test_quaternion_from_axis_angle_y_45deg() -> None:
+    q = quaternion_from_axis_angle(Axis.Y, 45.0, degrees=True)
+    q_vec = quaternion_from_axis_angle([0.0, 2.0, 0.0], np.pi / 4.0)
+    half = np.pi / 8.0
+    expected = [np.cos(half), 0.0, np.sin(half), 0.0]
+    assert q == pytest.approx(expected)
+    assert q_vec == pytest.approx(expected)
+
+
+def test_update_ib_accepts_axis_angle_quaternion(
+    manager: FluxelManager,
+) -> None:
+    session = manager.create_axis_projected_session(None, target_level=0)
+    q = quaternion_from_axis_angle(Axis.Z, 90.0, degrees=True)
+    session.update_ib(
+        rotation_quaternion=q,
+        warn_outside_refinement=False,
+    )
+    assert list(session.rotation_quaternion) == pytest.approx(q)
