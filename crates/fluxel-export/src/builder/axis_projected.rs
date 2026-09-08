@@ -50,8 +50,8 @@ fn push_face_ap(
         ap.is_immersed_face.push(true);
         ap.dist_owner_to_bnd.push(hit.dist_owner_to_bnd);
         ap.dist_neighbour_to_bnd.push(hit.dist_neighbour_to_bnd);
-        ap.owner_weights.push(hit.owner_weights);
-        ap.neighbour_weights.push(hit.neighbour_weights);
+        ap.owner_near_boundary.push(hit.owner_near_boundary);
+        ap.neighbour_near_boundary.push(hit.neighbour_near_boundary);
         ap.owner_bnd_anchor_id.push(hit.owner_bnd_anchor_id);
         ap.owner_bnd_patch_id.push(hit.owner_bnd_patch_id);
         ap.neighbour_bnd_anchor_id.push(hit.neighbour_bnd_anchor_id);
@@ -158,8 +158,8 @@ pub fn fill_ap_ibm_face_data(
             ap.is_immersed_face.push(true);
             ap.dist_owner_to_bnd.push(hit.dist_owner_to_bnd);
             ap.dist_neighbour_to_bnd.push(hit.dist_neighbour_to_bnd);
-            ap.owner_weights.push(hit.owner_weights);
-            ap.neighbour_weights.push(hit.neighbour_weights);
+            ap.owner_near_boundary.push(hit.owner_near_boundary);
+            ap.neighbour_near_boundary.push(hit.neighbour_near_boundary);
             ap.owner_bnd_anchor_id.push(hit.owner_bnd_anchor_id);
             ap.owner_bnd_patch_id.push(hit.owner_bnd_patch_id);
             ap.neighbour_bnd_anchor_id.push(hit.neighbour_bnd_anchor_id);
@@ -241,11 +241,11 @@ pub fn build_axis_projected_mesh(
         mesh.ap
             .dist_neighbour_to_bnd
             .extend(p.ap.dist_neighbour_to_bnd);
-        mesh.ap.owner_weights.extend(p.ap.owner_weights);
-        mesh.ap.neighbour_weights.extend(p.ap.neighbour_weights);
+        mesh.ap.owner_near_boundary.extend(p.ap.owner_near_boundary);
         mesh.ap
-            .owner_bnd_anchor_id
-            .extend(p.ap.owner_bnd_anchor_id);
+            .neighbour_near_boundary
+            .extend(p.ap.neighbour_near_boundary);
+        mesh.ap.owner_bnd_anchor_id.extend(p.ap.owner_bnd_anchor_id);
         mesh.ap.owner_bnd_patch_id.extend(p.ap.owner_bnd_patch_id);
         mesh.ap
             .neighbour_bnd_anchor_id

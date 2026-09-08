@@ -222,8 +222,8 @@ def export_axis_projected_polylines(
     is_immersed_face: np.ndarray,
     dist_owner_to_bnd: np.ndarray,
     dist_neighbour_to_bnd: np.ndarray,
-    owner_weights: np.ndarray,
-    neighbour_weights: np.ndarray,
+    owner_near_boundary: np.ndarray,
+    neighbour_near_boundary: np.ndarray,
     owner_bnd_anchor_id: np.ndarray,
     neighbour_bnd_anchor_id: np.ndarray,
     owner_bnd_patch_id: np.ndarray,
@@ -234,9 +234,12 @@ def export_axis_projected_polylines(
     Exports axis-projected polylines:
     owner/neighbour center -> boundary intercept per face.
 
-    Each interior face with a boundary hit produces **two** VTK polylines:
-    first the owner-side stencil (C_o, B),
-    then the neighbour-side stencil (C_n, B).
+    Each interior face with a boundary hit produces **two** VTK polylines.
+    All owner-side segments (C_o, B_o) precede all neighbour-side segments
+    (C_n, B_n); the two sides may hit different boundary sheets. Endpoints
+    use the physical distances, so a segment can have zero length when the
+    boundary passes through its cell center. The boolean ``near_boundary``
+    cell data marks candidates for a cell-center Dirichlet constraint.
     """
     n_hit = int(np.sum(is_immersed_face))
     owner_bnd_anchor_id = owner_bnd_anchor_id
@@ -288,7 +291,9 @@ def export_axis_projected_polylines(
         [np.zeros(n_owner_immersed_faces), np.ones(n_neighbour_immersed_faces)],
         axis=0,
     )
-    weights = np.concatenate([owner_weights, neighbour_weights], axis=0)
+    near_boundary = np.concatenate(
+        [owner_near_boundary, neighbour_near_boundary], axis=0
+    )
     anchor_per_polyline = np.concatenate(
         [owner_bnd_anchor_id, neighbour_bnd_anchor_id], axis=0
     )
@@ -308,7 +313,7 @@ def export_axis_projected_polylines(
 
     pd = pv.PolyData(points, lines=lines.ravel())
     pd.cell_data["side"] = sides
-    pd.cell_data["weights"] = weights
+    pd.cell_data["near_boundary"] = near_boundary
     pd.cell_data["bnd_anchor_id"] = anchor_per_polyline
     pd.cell_data["bnd_patch_id"] = patch_per_polyline
     pd.save(f"{output_prefix}_polylines_{axis}.vtp")
@@ -318,8 +323,6 @@ def export_axis_projected_polylines(
 def _axis_internal_mesh_slice(
     mesh: CfdAxisProjectedMesh, axis: Axis
 ) -> tuple[
-    np.ndarray,
-    np.ndarray,
     np.ndarray,
     np.ndarray,
     np.ndarray,
@@ -343,8 +346,8 @@ def _axis_internal_mesh_slice(
         mesh.ap.is_immersed_face[mask_for_n_faces],
         mesh.ap.dist_owner_to_bnd[mask_for_n_immersed_faces],
         mesh.ap.dist_neighbour_to_bnd[mask_for_n_immersed_faces],
-        mesh.ap.owner_weights[mask_for_n_immersed_faces],
-        mesh.ap.neighbour_weights[mask_for_n_immersed_faces],
+        mesh.ap.owner_near_boundary[mask_for_n_immersed_faces],
+        mesh.ap.neighbour_near_boundary[mask_for_n_immersed_faces],
         mesh.ap.owner_bnd_anchor_id[mask_for_n_immersed_faces],
         mesh.ap.neighbour_bnd_anchor_id[mask_for_n_immersed_faces],
         mesh.ap.owner_bnd_patch_id[mask_for_n_immersed_faces],
@@ -356,7 +359,11 @@ def export_apibm_debug_data(
     mesh: CfdAxisProjectedMesh, output_prefix: str = "apibm_debug"
 ) -> None:
     """
-    Exports APIBM debug arrays and `N_faces` polylines:
+    Export APIBM debug arrays and two polylines per immersed face.
+
+    The NPZ stores physical distances alongside boolean constraint candidates
+    named ``ap_owner_near_boundary`` and ``ap_neighbour_near_boundary``.
+    Each axis's VTP stores the flags as ``near_boundary`` cell data.
 
     Parameters
     ----------
@@ -375,8 +382,8 @@ def export_apibm_debug_data(
         ap_is_immersed_face=mesh.ap.is_immersed_face,
         ap_dist_owner_to_bnd=mesh.ap.dist_owner_to_bnd,
         ap_dist_neighbour_to_bnd=mesh.ap.dist_neighbour_to_bnd,
-        ap_owner_weights=mesh.ap.owner_weights,
-        ap_neighbour_weights=mesh.ap.neighbour_weights,
+        ap_owner_near_boundary=mesh.ap.owner_near_boundary,
+        ap_neighbour_near_boundary=mesh.ap.neighbour_near_boundary,
         ap_owner_bnd_anchor_id=mesh.ap.owner_bnd_anchor_id,
         ap_neighbour_bnd_anchor_id=mesh.ap.neighbour_bnd_anchor_id,
         ap_owner_bnd_patch_id=mesh.ap.owner_bnd_patch_id,
@@ -390,8 +397,8 @@ def export_apibm_debug_data(
             is_immersed_face,
             dist_o,
             dist_n,
-            ow,
-            nw,
+            owner_near_boundary,
+            neighbour_near_boundary,
             oba,
             nba,
             obp,
@@ -405,8 +412,8 @@ def export_apibm_debug_data(
             is_immersed_face=is_immersed_face,
             dist_owner_to_bnd=dist_o,
             dist_neighbour_to_bnd=dist_n,
-            owner_weights=ow,
-            neighbour_weights=nw,
+            owner_near_boundary=owner_near_boundary,
+            neighbour_near_boundary=neighbour_near_boundary,
             owner_bnd_anchor_id=oba,
             neighbour_bnd_anchor_id=nba,
             owner_bnd_patch_id=obp,
@@ -448,7 +455,8 @@ def export_apibm_mesh(
 ) -> None:
     """
     Exports an APIBM mesh to a VTU file.
-    Also exports debug arrays as a separate NPZ file.
+    Also exports debug arrays as a separate NPZ file and per-axis VTP files
+    containing boundary-intersection segments and near-boundary flags.
 
     Parameters
     ----------

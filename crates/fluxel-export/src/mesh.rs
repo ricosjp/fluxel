@@ -49,13 +49,22 @@ pub struct CfdGhostCellMesh {
 /// `is_immersed_face` has length `N_internal_faces`. All other fields are compressed to
 /// length `N_immersed = count(is_immersed_face)` and store data only for immersed faces,
 /// in the same order as `true` entries in `is_immersed_face`.
+///
+/// Near-boundary flags mark cell-center Dirichlet-constraint candidates when
+/// `d / delta_x <= delta_x / L`, using each side's cell width along the face axis
+/// and the largest computational-domain extent `L`. The solver must apply any
+/// constraints; the flags leave the physical distances unchanged.
 #[derive(Debug, Default, Clone)]
 pub struct ApIbmFaceData {
     pub is_immersed_face: Vec<bool>,
+    /// Physical owner-center distance to the first boundary hit, possibly zero.
     pub dist_owner_to_bnd: Vec<f64>,
+    /// Physical neighbour-center distance to the first boundary hit, possibly zero.
     pub dist_neighbour_to_bnd: Vec<f64>,
-    pub owner_weights: Vec<[f64; 2]>,
-    pub neighbour_weights: Vec<[f64; 2]>,
+    /// Whether the owner center is a Dirichlet-constraint candidate.
+    pub owner_near_boundary: Vec<bool>,
+    /// Whether the neighbour center is a Dirichlet-constraint candidate.
+    pub neighbour_near_boundary: Vec<bool>,
     pub owner_bnd_anchor_id: Vec<usize>,
     pub owner_bnd_patch_id: Vec<usize>,
     pub neighbour_bnd_anchor_id: Vec<usize>,

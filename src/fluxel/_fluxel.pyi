@@ -172,6 +172,16 @@ class ApIbmFaceData:
     compressed to ``N_immersed = count(is_immersed_face)`` and store data only
     for immersed faces, in the same order as ``True`` entries in
     `is_immersed_face`.
+
+    Distances have shape ``(N_immersed,)`` and dtype ``float64``. They are
+    physical distances from each cell center to its first boundary hit along
+    the face axis, including zero for a boundary through the center.
+    ``owner_near_boundary`` and ``neighbour_near_boundary`` are boolean arrays
+    of the same shape. Each flags a candidate for a cell-center Dirichlet
+    constraint when ``d / delta_x <= delta_x / L``, where ``delta_x`` is that
+    side's cell width along the face axis and ``L`` is the largest extent of
+    the computational domain. These flags do not alter the distances or
+    apply boundary conditions; the solver must handle the constraints.
     """
 
     @property
@@ -181,9 +191,13 @@ class ApIbmFaceData:
     @property
     def dist_neighbour_to_bnd(self) -> np.ndarray: ...
     @property
-    def owner_weights(self) -> np.ndarray: ...
+    def owner_near_boundary(self) -> np.ndarray:
+        """Boolean candidates for an owner-cell-center Dirichlet constraint."""
+        ...
     @property
-    def neighbour_weights(self) -> np.ndarray: ...
+    def neighbour_near_boundary(self) -> np.ndarray:
+        """Boolean candidates for a neighbour-center Dirichlet constraint."""
+        ...
     @property
     def owner_bnd_anchor_id(self) -> np.ndarray: ...
     @property
@@ -339,8 +353,9 @@ class FluxelManager:
 
         This method reads an STL file, refines the octree cells near the surface
         up to the `target_level`, performs axis raytracing, and calculates
-        APIBM data such as distance to STL mesh along each axis
-        or extrapolation weights.
+        APIBM data such as physical distances to the immersed boundary along
+        each axis and cell-center Dirichlet-constraint candidates. These are
+        available in the returned mesh's ``ap`` payload.
 
         Parameters
         ----------

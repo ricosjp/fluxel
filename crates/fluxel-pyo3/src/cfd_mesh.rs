@@ -106,13 +106,25 @@ impl CfdGhostCellMesh {
 }
 
 /// Compressed APIBM immersed-boundary face payload.
+///
+/// `is_immersed_face` has shape `(N_internal_faces,)`; all other arrays have
+/// shape `(N_immersed,)`, in the order of its true entries. Distances are
+/// physical cell-center-to-boundary distances, including zero. Boolean
+/// near-boundary flags mark Dirichlet-constraint candidates when
+/// `d / delta_x <= delta_x / L`, using each side's cell width along the face
+/// axis and the largest computational-domain extent `L`. The solver must
+/// apply any constraints; the flags leave the distances unchanged.
 #[pyclass(get_all)]
 pub struct ApIbmFaceData {
     pub is_immersed_face: Py<PyArray1<bool>>,
+    /// Physical owner-center distance to the first boundary hit, possibly zero.
     pub dist_owner_to_bnd: Py<PyArray1<f64>>,
+    /// Physical neighbour-center distance to the first boundary hit, possibly zero.
     pub dist_neighbour_to_bnd: Py<PyArray1<f64>>,
-    pub owner_weights: Py<PyArray2<f64>>,
-    pub neighbour_weights: Py<PyArray2<f64>>,
+    /// Boolean candidates for an owner-cell-center Dirichlet constraint.
+    pub owner_near_boundary: Py<PyArray1<bool>>,
+    /// Boolean candidates for a neighbour-cell-center Dirichlet constraint.
+    pub neighbour_near_boundary: Py<PyArray1<bool>>,
     pub owner_bnd_anchor_id: Py<PyArray1<usize>>,
     pub owner_bnd_patch_id: Py<PyArray1<usize>>,
     pub neighbour_bnd_anchor_id: Py<PyArray1<usize>>,
@@ -125,8 +137,8 @@ impl ApIbmFaceData {
             is_immersed_face: vec_to_py1(py, ap.is_immersed_face),
             dist_owner_to_bnd: vec_to_py1(py, ap.dist_owner_to_bnd),
             dist_neighbour_to_bnd: vec_to_py1(py, ap.dist_neighbour_to_bnd),
-            owner_weights: vec_k_to_py2::<f64, 2>(py, ap.owner_weights),
-            neighbour_weights: vec_k_to_py2::<f64, 2>(py, ap.neighbour_weights),
+            owner_near_boundary: vec_to_py1(py, ap.owner_near_boundary),
+            neighbour_near_boundary: vec_to_py1(py, ap.neighbour_near_boundary),
             owner_bnd_anchor_id: vec_to_py1(py, ap.owner_bnd_anchor_id),
             owner_bnd_patch_id: vec_to_py1(py, ap.owner_bnd_patch_id),
             neighbour_bnd_anchor_id: vec_to_py1(py, ap.neighbour_bnd_anchor_id),
