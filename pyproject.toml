@@ -3,17 +3,28 @@ requires = ["maturin>=1.0,<2.0"]
 build-backend = "maturin"
 
 [project]
-name = "fluxel"
+name = "fluxel-cfd"
 version = "0.2.0"
 description = "An extremely fast hierarchical grid mesh generator for CFD solvers"
 readme = "README.md"
 license = { text = "Apache-2.0" }
 authors = [{ name = "RICOS Co. Ltd." }]
-requires-python = ">=3.12,<3.13"
-classifiers = ["Programming Language :: Python", "Programming Language :: Rust"]
+maintainers = [{ name = "Daichi Ishida", email = "ishida@ricos.co.jp" }]
+keywords = ["cfd", "mesh", "amr", "octree"]
+requires-python = ">=3.11"
+classifiers = [
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Rust",
+    "License :: OSI Approved :: Apache Software License",
+    "Topic :: Scientific/Engineering",
+]
 dependencies = [
     "numpy>=2.4.4",
 ]
+[project.urls]
+Repository = "https://github.com/ricosjp/fluxel"
 
 [dependency-groups]
 dev = [

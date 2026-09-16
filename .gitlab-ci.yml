@@ -7,6 +7,7 @@ variables:
 
 stages:
   - test
+  - build
   - deploy
 
 default:
@@ -54,8 +55,61 @@ pytest:
 
 
 # -----------------------------------------------------------------------------
-# deploy stage
+# build / deploy
 # -----------------------------------------------------------------------------
+# Publish is tag-only. The tag (with an optional leading "v") must match
+# version in both pyproject.toml and Cargo.toml.
+#
+# GitLab CI/CD variables (masked, protected; use protected tags):
+#   PYPI_PUBLISH_TOKEN  PyPI API token (pypi-...)
+#
+
+.build:wheel:
+  stage: build
+  image:
+    name: ghcr.io/pyo3/maturin:latest
+    entrypoint: [""]
+  before_script: []
+  script:
+    - |
+      set -eu
+      TAG="${CI_COMMIT_TAG#v}"
+      PY_VERSION=$(awk -F'"' '/^version = / {print $2; exit}' pyproject.toml)
+      CARGO_VERSION=$(awk -F'"' '/^version = / {print $2; exit}' Cargo.toml)
+      echo "tag=${TAG} pyproject=${PY_VERSION} cargo=${CARGO_VERSION}"
+      test "${PY_VERSION}" = "${TAG}"
+      test "${CARGO_VERSION}" = "${TAG}"
+    - maturin build --release --strip --sdist --compatibility pypi --out dist
+  artifacts:
+    paths:
+      - dist/
+    expire_in: 7 days
+  rules:
+    - if: $CI_COMMIT_TAG
+
+build:wheel:linux:
+  extends: .build:wheel
+  tags:
+    - no-gpu
+    - GenuineIntel
+
+publish:pypi:
+  stage: deploy
+  image: astral/uv:python${PYTHON_VERSION}-${BASE_LAYER}
+  before_script: []
+  needs:
+    - job: build:wheel:linux
+  script:
+    - uv publish --token "$PYPI_PUBLISH_TOKEN"
+  environment:
+    name: pypi
+    url: https://pypi.org/project/fluxel-cfd/
+  resource_group: pypi
+  tags:
+    - no-gpu
+  rules:
+    - if: $CI_COMMIT_TAG
+      when: manual
 
 # pages:
 #   stage: deploy
@@ -74,18 +128,3 @@ pytest:
 #     - develop
 #     - docs/sphinx-update
 #     - update/v0.1
-
-# .deploy:wheel:
-#   stage: deploy
-#   script:
-#     - uv version $VERSION
-#     - uv build
-#     - uv publish --username __token__ --password $PYPI_PUBLISH_TOKEN -n -v
-
-# deploy:wheel:tags:
-#   image: astral/uv:python$PYTHON_VERSION-$BASE_LAYER
-#   extends: .deploy:wheel
-#   before_script:
-#     - export VERSION=$CI_COMMIT_REF_NAME
-#   only:
-#     - tags
