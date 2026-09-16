@@ -7,7 +7,8 @@ name = "fluxel-cfd"
 version = "0.2.0"
 description = "An extremely fast hierarchical grid mesh generator for CFD solvers"
 readme = "README.md"
-license = { text = "Apache-2.0" }
+license = "Apache-2.0"
+license-files = ["LICENSE"]
 authors = [{ name = "RICOS Co. Ltd." }]
 maintainers = [{ name = "Daichi Ishida", email = "ishida@ricos.co.jp" }]
 keywords = ["cfd", "mesh", "amr", "octree"]
@@ -78,3 +79,7 @@ bindings = "pyo3"
 python-source = "src"
 manifest-path = "crates/fluxel-pyo3/Cargo.toml"
 module-name = "fluxel._fluxel"
+include = [
+    { path = "LICENSE", format = "sdist" },
+    { path = "README.md", format = "sdist" },
+]
