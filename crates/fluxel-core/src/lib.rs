@@ -4,11 +4,15 @@
 //! source of truth for fast neighbour queries, point location, and bulk refine/coarsen.
 
 pub mod balance;
+mod balanced;
+pub use balanced::BalancedForest;
 pub mod enums;
+pub mod error;
+pub use error::{validate_resolution, ForestError};
 pub mod forest;
 pub mod neighbour;
 pub mod query;
 pub mod refine;
 
-pub use enums::{Axis, CoordinateType, Direction};
+pub use enums::{Axis, Direction};
 pub use forest::Forest;

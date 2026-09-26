@@ -61,7 +61,7 @@ mod tests {
 
     #[test]
     fn test_find_cell_containing() {
-        let mut forest = Forest::new([1, 1, 1]);
+        let mut forest = Forest::new([1, 1, 1]).unwrap();
 
         // Manually create the L=0 root cell (covering the entire domain) and mimic splitting it into four.
         // For convenience, here add only one L=1 child cell without removing the parent.

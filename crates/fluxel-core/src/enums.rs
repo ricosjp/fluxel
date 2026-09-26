@@ -1,13 +1,3 @@
-/// Coordinate type for the domain.
-#[repr(u8)]
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-pub enum CoordinateType {
-    #[default]
-    Cartesian = 0, // Default
-    Cylindrical = 1,
-    Spherical = 2,
-}
-
 /// Axis for the domain.
 #[repr(u8)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -93,11 +83,6 @@ impl Direction {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn coordinate_type_default_is_cartesian() {
-        assert_eq!(CoordinateType::default(), CoordinateType::Cartesian);
-    }
 
     #[test]
     fn axis_as_index_and_split() {

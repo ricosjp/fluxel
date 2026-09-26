@@ -1,12 +1,8 @@
-//! Python-facing rigid-pose helpers.
-
 use pyo3::prelude::*;
-
-/// Builds a unit quaternion `[w, x, y, z]` from an axis-angle rotation.
-///
-/// `axis` is a 3-vector (normalized internally). `angle` is in radians.
 #[pyfunction]
 #[pyo3(name = "_quaternion_from_axis_angle")]
-pub fn quaternion_from_axis_angle(axis: [f64; 3], angle: f64) -> [f64; 4] {
-    fluxel_ibm::quaternion_from_axis_angle(axis, angle)
+/// Return a normalized w/x/y/z quaternion for a finite axis and angle in radians; zero axis is identity.
+pub fn quaternion_from_axis_angle(axis: [f64; 3], angle: f64) -> PyResult<[f64; 4]> {
+    fluxel_geometry::quaternion_from_axis_angle(axis, angle)
+        .map_err(|e| crate::errors::to_python(e.into()))
 }

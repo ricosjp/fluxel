@@ -6,20 +6,13 @@ authors.workspace = true
 
 [dependencies]
 # Fluxel crates
-fluxel-core = { path = "../fluxel-core" }
 fluxel-geometry = { path = "../fluxel-geometry" }
 fluxel-ibm = { path = "../fluxel-ibm" }
-fluxel-export = { path = "../fluxel-export" }
-fluxel-sfc = { path = "../fluxel-sfc" }
+fluxel-mesh = { path = "../fluxel-mesh" }
+fluxel-engine = { path = "../fluxel-engine", features = ["mesh-io"] }
 
 # Python bindings
 pyo3 = { version = "0.28.2", features = ["abi3-py39", "extension-module"] }
-
-# Threading libraries
-rayon.workspace = true
-
-# Spatial collision detection libraries
-parry3d-f64.workspace = true
 
 # NumPy bindings
 numpy = "0.28.0"

@@ -1,28 +1,48 @@
 //! Axis-aligned bounding boxes and mapping from logical octree cells to physical space.
 
+use crate::GeometryError;
 use fluxel_sfc::{LogicalCell, MAX_LEVEL};
 
 /// Physical axis-aligned bounding box of a region.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct BoundingBox {
     /// Minimum corner `(x, y, z)`.
-    pub min: [f64; 3],
+    pub(crate) min: [f64; 3],
     /// Maximum corner `(x, y, z)` (strictly greater than `min` per axis).
-    pub max: [f64; 3],
+    pub(crate) max: [f64; 3],
 }
 
 impl BoundingBox {
-    /// Constructs a box with `min < max` on every axis.
-    ///
-    /// # Panics
-    ///
-    /// If any axis has `min >= max`.
-    pub fn new(min: [f64; 3], max: [f64; 3]) -> Self {
-        assert!(
-            min[0] < max[0] && min[1] < max[1] && min[2] < max[2],
-            "Invalid BoundingBox bounds"
-        );
-        Self { min, max }
+    /// Validates finite, strictly ordered bounds.
+    /// Returns GeometryError::InvalidBounds for nonfinite, empty, reversed or overflowing extents.
+    pub fn new(min: [f64; 3], max: [f64; 3]) -> Result<Self, GeometryError> {
+        if !(0..3).all(|a| {
+            min[a].is_finite()
+                && max[a].is_finite()
+                && min[a] < max[a]
+                && (max[a] - min[a]).is_finite()
+        }) {
+            return Err(GeometryError::InvalidBounds);
+        }
+        Ok(Self { min, max })
+    }
+    /// Physical minimum corner, included by point containment.
+    pub fn min(&self) -> [f64; 3] {
+        self.min
+    }
+    /// Physical maximum corner, excluded by point containment.
+    pub fn max(&self) -> [f64; 3] {
+        self.max
+    }
+    /// Test finite points against the half-open box: min <= point < max on every axis.
+    pub fn contains(&self, point: [f64; 3]) -> bool {
+        (0..3).all(|a| point[a].is_finite() && point[a] >= self.min[a] && point[a] < self.max[a])
+    }
+    /// Test positive-volume overlap with a center/size cell box; face-only contact is excluded.
+    pub fn overlaps_cell(&self, center: [f64; 3], size: [f64; 3]) -> bool {
+        (0..3).all(|a| {
+            center[a] - size[a] / 2.0 < self.max[a] && center[a] + size[a] / 2.0 > self.min[a]
+        })
     }
 }
 
@@ -30,27 +50,48 @@ impl BoundingBox {
 #[derive(Debug, Clone)]
 pub struct Geometry {
     /// World-space AABB covering all trees.
-    pub global_bbox: BoundingBox,
+    pub(crate) global_bbox: BoundingBox,
     /// Number of root trees along each axis `[Nx, Ny, Nz]`.
-    pub base_res: [u32; 3],
+    pub(crate) base_res: [u32; 3],
     /// Physical edge length of one tree’s logical cube `[dx, dy, dz]`.
-    pub tree_size: [f64; 3],
+    pub(crate) tree_size: [f64; 3],
 }
 
 impl Geometry {
     /// Builds geometry from the world AABB and base tree grid resolution.
     ///
     /// Each tree occupies an equal sub-box of `global_bbox`; `tree_size` is that box’s extent.
-    pub fn new(global_bbox: BoundingBox, base_res: [u32; 3]) -> Self {
+    /// Returns InvalidResolution for zero root components, more than 2^26 roots, or
+    /// nonpositive/nonfinite root widths after conversion to physical coordinates.
+    pub fn new(global_bbox: BoundingBox, base_res: [u32; 3]) -> Result<Self, GeometryError> {
+        fluxel_core::validate_resolution(base_res).map_err(|_| GeometryError::InvalidResolution)?;
         let tree_dx = (global_bbox.max[0] - global_bbox.min[0]) / base_res[0] as f64;
         let tree_dy = (global_bbox.max[1] - global_bbox.min[1]) / base_res[1] as f64;
         let tree_dz = (global_bbox.max[2] - global_bbox.min[2]) / base_res[2] as f64;
 
-        Self {
+        if ![tree_dx, tree_dy, tree_dz]
+            .iter()
+            .all(|s| s.is_finite() && *s > 0.0)
+        {
+            return Err(GeometryError::InvalidResolution);
+        }
+        Ok(Self {
             global_bbox,
             base_res,
             tree_size: [tree_dx, tree_dy, tree_dz],
-        }
+        })
+    }
+    /// Physical domain bounds.
+    pub fn bounding_box(&self) -> BoundingBox {
+        self.global_bbox
+    }
+    /// Number of root trees in X/Y/Z.
+    pub fn base_resolution(&self) -> [u32; 3] {
+        self.base_res
+    }
+    /// Physical X/Y/Z widths of one root tree.
+    pub fn tree_size(&self) -> [f64; 3] {
+        self.tree_size
     }
 
     /// Returns the physical **center** and **edge lengths** of `cell`’s AABB.
@@ -61,6 +102,7 @@ impl Geometry {
     /// # Returns
     ///
     /// `(center, size)` where `center` and `size` are `[x, y, z]` in world units.
+    /// The caller must provide a valid logical cell in this geometry; membership is not checked.
     pub fn cell_bounds(&self, cell: &LogicalCell) -> ([f64; 3], [f64; 3]) {
         let [nx, ny, _] = self.base_res;
         let t_id = cell.tree_id;
@@ -108,9 +150,9 @@ mod tests {
     #[test]
     fn test_geometry_mapping() {
         // World box 2×2×2 centred at the origin
-        let bbox = BoundingBox::new([-1.0, -1.0, -1.0], [1.0, 1.0, 1.0]);
+        let bbox = BoundingBox::new([-1.0, -1.0, -1.0], [1.0, 1.0, 1.0]).unwrap();
         // Split into 2×2×2 = 8 trees along X, Y, Z
-        let geom = Geometry::new(bbox, [2, 2, 2]);
+        let geom = Geometry::new(bbox, [2, 2, 2]).unwrap();
 
         // Each tree should be 1×1×1 in physical space
         assert_eq!(geom.tree_size, [1.0, 1.0, 1.0]);

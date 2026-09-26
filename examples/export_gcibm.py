@@ -35,6 +35,7 @@ class GcibmExportConfig(BaseModel, frozen=True):
     )
     target_level: int = 3
     n_leaf_refinement: int = 3
+    max_cells: int | None = Field(default=None, gt=0, strict=True)
     base_resolution: list[int, int, int]
     bounding_box: BoundingBoxConfig = Field(default_factory=BoundingBoxConfig)
     fluid_seed_point: list[float, float, float]
@@ -305,13 +306,20 @@ if __name__ == "__main__":
     print(f"Base Resolution: {base_res}")
     print(f"Target Level: {target_level}")
     print(f"Number of Leaf Refinements: {n_leaf_refinement}")
+    print(
+        "Maximum cells: "
+        f"{cfg.max_cells if cfg.max_cells is not None else 'unlimited'}"
+    )
     print(f"Input Mesh File: {mesh_path}")
     print(f"Output VTU File: {output_path}")
     print(f"Fluid seed point: {fluid_seed}")
 
     # 2. FluxelManager の初期化
     manager = FluxelManager(
-        bbox, base_res=base_res, n_leaf_refinement=n_leaf_refinement
+        bbox,
+        base_res=base_res,
+        n_leaf_refinement=n_leaf_refinement,
+        max_cells=cfg.max_cells,
     )
     if not mesh_path.exists():
         raise SystemExit(f"Input mesh file does not exist: {mesh_path}")

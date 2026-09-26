@@ -35,7 +35,8 @@ def quaternion_from_axis_angle(
     ----------
     axis : Axis or sequence of float
         Rotation axis. Pass ``Axis.X`` / ``Axis.Y`` / ``Axis.Z``, or a
-        3-vector which is normalized. A near-zero vector yields identity.
+        Finite 3-vector which is normalized. An exactly zero vector yields
+        identity; small nonzero vectors are normalized normally.
     angle : float
         Rotation angle. Radians by default; set ``degrees=True`` to pass
         degrees.
@@ -46,6 +47,17 @@ def quaternion_from_axis_angle(
     -------
     list of float
         Unit quaternion ``[w, x, y, z]`` for ``update_ib`` / ``remesh``.
+
+    Raises
+    ------
+    ValueError
+        If the axis does not have three components, or the axis/angle is
+        nonfinite. Non-numeric values may raise TypeError or ValueError.
+
+    Notes
+    -----
+    Describes a rotation about the coordinate origin. Session pose updates
+    interpret the quaternion as absolute, not as an incremental rotation.
     """
     angle_rad = math.radians(angle) if degrees else float(angle)
     return list(_quaternion_from_axis_angle(_as_axis_vector(axis), angle_rad))

@@ -1,241 +1,248 @@
-//! Stateful APIBM session for rigid moving-boundary updates.
-
-use crate::cfd_mesh::CfdAxisProjectedMesh;
-use crate::pipeline::{
-    build_forest_for_ibm, prepare_forest_and_mesh, MeshBuildConfig, RefinementRegion,
+//! Python publication and warnings around an atomic Rust session.
+use crate::{
+    arguments::{self, RegionInput},
+    cfd_mesh::{CfdAxisProjectedMesh, SnapshotCache},
+    errors::to_python,
 };
-use fluxel_core::Forest as CoreForest;
-use fluxel_export::CfdAxisProjectedMesh as CoreCfdAxisProjectedMesh;
-use fluxel_export::{has_under_refined_intersect_cells, rebuild_axis_projected_ib};
-use fluxel_geometry::Geometry;
-use fluxel_ibm::mesh::IBMMesh;
-use fluxel_ibm::pose_from_translation_quaternion;
-use fluxel_ibm::solver;
-use parry3d_f64::math::Pose;
-use pyo3::exceptions::PyUserWarning;
-use pyo3::prelude::*;
-
-/// Stateful APIBM session retaining forest + IBM geometry for `update_ib` / `remesh`.
+use fluxel_engine::{self as engine, PreparedUpdate, RemeshRequest};
+use pyo3::{exceptions::PyUserWarning, prelude::*};
+/// Stateful APIBM session for rigid immersed-boundary motion.
+///
+/// Keep this object alive across timesteps. Use ``update_ib`` when the
+/// background mesh can stay fixed, and ``remesh`` when AMR should follow
+/// the boundary.
+///
+/// Attributes
+/// ----------
+/// mesh : CfdAxisProjectedMesh
+///     Current CFD mesh snapshot (a new Python object on each access).
+/// translation : list of float
+///     Current rigid translation ``[tx, ty, tz]`` applied to the IB mesh.
+/// rotation_quaternion : list of float
+///     Current rigid rotation as a unit quaternion ``[w, x, y, z]``.
 #[pyclass]
 pub struct ApibmSession {
-    config: MeshBuildConfig,
-    forest: CoreForest,
-    geom: Geometry,
-    ibm_mesh: IBMMesh,
-    pose: Pose,
-    mesh: CoreCfdAxisProjectedMesh,
-    target_level: u8,
-    refinement_regions: Vec<RefinementRegion>,
+    inner: engine::ApibmSession,
+    cache: SnapshotCache,
 }
-
 impl ApibmSession {
-    /// Builds a session at identity pose: AMR forest, IBM mesh, and initial CFD snapshot.
-    pub(crate) fn new(
-        config: &MeshBuildConfig,
-        mesh_path: Option<&str>,
-        target_level: u8,
-        refinement_regions: Option<Vec<RefinementRegion>>,
-    ) -> PyResult<Self> {
-        let refinement_regions = refinement_regions.unwrap_or_default();
-        let identity = Pose::identity();
-        let (forest, geom, ibm_mesh) = prepare_forest_and_mesh(
-            config,
-            mesh_path,
-            target_level,
-            &refinement_regions,
-            &identity,
-        )?;
-
-        let cell_types = solver::mark_intersecting_cells(&forest, &geom, &ibm_mesh, &identity);
-        let mesh = fluxel_export::builder::build_axis_projected_mesh(
-            &forest,
-            &geom,
-            &ibm_mesh,
-            &cell_types,
-            &identity,
-        );
-
-        Ok(Self {
-            config: *config,
-            forest,
-            geom,
-            ibm_mesh,
-            pose: identity,
-            mesh,
-            target_level,
-            refinement_regions,
-        })
+    /// Wrap an initialized Rust session with an empty publication cache.
+    pub(crate) fn new(inner: engine::ApibmSession) -> Self {
+        Self {
+            inner,
+            cache: SnapshotCache::default(),
+        }
     }
-
-    /// Replaces pose components that were provided; omitted axes keep the current values.
-    fn set_pose_from_args(
+    /// Warn, allocate Python arrays/object, then commit the prepared Rust candidate.
+    /// Any pre-commit exception leaves session state unchanged; the conversion cache
+    /// may have advanced but is keyed by snapshot provenance. Exclusive PyO3 borrowing
+    /// rejects reentrant/concurrent session access during the operation.
+    fn publish(
         &mut self,
-        translation: Option<[f64; 3]>,
-        rotation_quaternion: Option<[f64; 4]>,
-    ) {
-        if translation.is_none() && rotation_quaternion.is_none() {
-            return;
-        }
-        let t = translation.unwrap_or([
-            self.pose.translation.x,
-            self.pose.translation.y,
-            self.pose.translation.z,
-        ]);
-        let q = rotation_quaternion.unwrap_or([
-            self.pose.rotation.w,
-            self.pose.rotation.x,
-            self.pose.rotation.y,
-            self.pose.rotation.z,
-        ]);
-        self.pose = pose_from_translation_quaternion(t, q);
-    }
-
-    /// Emits a Python `UserWarning` when the IB intersects cells coarser than `target_level`.
-    fn emit_under_refined_warning(
         py: Python<'_>,
+        update: PreparedUpdate,
         warn: bool,
-        forest: &CoreForest,
-        cell_types: &[fluxel_ibm::CellType],
-        target_level: u8,
-    ) -> PyResult<()> {
-        if !warn {
-            return Ok(());
+        copy: bool,
+    ) -> PyResult<Py<CfdAxisProjectedMesh>> {
+        if warn && update.report().under_refined_cells > 0 {
+            py.import("warnings")?.call_method1("warn", (
+                "Immersed boundary intersects cells below target_level; consider remesh() to restore refinement near the boundary.",
+                py.get_type::<PyUserWarning>(),
+            ))?;
         }
-        if has_under_refined_intersect_cells(forest, cell_types, target_level) {
-            let warnings = py.import("warnings")?;
-            warnings.call_method1(
-                "warn",
-                (
-                    "Immersed boundary intersects cells below target_level; \
-                     consider remesh() to restore refinement near the boundary.",
-                    py.get_type::<PyUserWarning>(),
-                ),
-            )?;
-        }
-        Ok(())
+        // PyO3's exclusive receiver borrow rejects reentrant or concurrent mutation.
+        // All fallible publication precedes commit, including warnings-as-errors.
+        let result = if copy {
+            CfdAxisProjectedMesh::copied(py, update.mesh())?
+        } else {
+            self.cache.export(py, update.mesh())?
+        };
+        let result = Py::new(py, result)?;
+        self.inner.commit(update).map_err(to_python)?;
+        Ok(result)
     }
 }
-
 #[pymethods]
 impl ApibmSession {
-    /// Current CFD mesh snapshot (new Python object each call).
     #[getter]
-    fn mesh(&self, py: Python<'_>) -> CfdAxisProjectedMesh {
-        CfdAxisProjectedMesh::from_core(py, self.mesh.clone())
+    /// Return a fresh snapshot with independent writable arrays; changes do not affect the session.
+    fn mesh(&self, py: Python<'_>) -> PyResult<CfdAxisProjectedMesh> {
+        CfdAxisProjectedMesh::copied(py, self.inner.mesh())
     }
-
-    /// Current rigid translation applied to the IBM mesh.
-    #[getter]
-    fn translation(&self) -> [f64; 3] {
-        [
-            self.pose.translation.x,
-            self.pose.translation.y,
-            self.pose.translation.z,
-        ]
-    }
-
-    /// Current rigid rotation quaternion `[w, x, y, z]`.
-    #[getter]
-    fn rotation_quaternion(&self) -> [f64; 4] {
-        [
-            self.pose.rotation.w,
-            self.pose.rotation.x,
-            self.pose.rotation.y,
-            self.pose.rotation.z,
-        ]
-    }
-
-    /// Updates immersed-boundary data only (background mesh topology fixed).
+    /// Return a read-only snapshot, sharing cached immutable array storage.
     ///
-    /// `translation` and `rotation_quaternion` set the absolute rigid pose of the IB mesh
-    /// (`[w, x, y, z]`). Defaults keep the current pose components when omitted.
-    /// Build the quaternion from an axis and angle with `quaternion_from_axis_angle`.
-    #[pyo3(signature = (
-        translation = None,
-        rotation_quaternion = None,
-        warn_outside_refinement = true
-    ))]
+    /// Old snapshots remain valid after updates and session destruction.
+    /// Initial publication copies to immutable storage.
+    /// Repeated reads reuse that storage.
+    ///
+    /// Returns
+    /// -------
+    /// CfdAxisProjectedMesh
+    ///     Read-only arrays backed by immutable Python bytes, with fresh ndarray
+    ///     headers and a fresh patch dictionary. This is not end-to-end zero-copy.
+    ///     Array metadata changes do not change subsequent snapshots.
+    fn snapshot(&mut self, py: Python<'_>) -> PyResult<CfdAxisProjectedMesh> {
+        self.cache.export(py, self.inner.mesh())
+    }
+    #[getter]
+    /// Current absolute translation [tx, ty, tz] in surface length units.
+    fn translation(&self) -> [f64; 3] {
+        self.inner.pose().translation()
+    }
+    #[getter]
+    /// Current normalized absolute rotation [w, x, y, z].
+    fn rotation_quaternion(&self) -> [f64; 4] {
+        self.inner.pose().quaternion()
+    }
+    #[pyo3(signature = (translation = None, rotation_quaternion = None, warn_outside_refinement = true, *, copy = true))]
+    /// Recomputes IB face data only (topology fixed).
+    ///
+    /// Pose arguments are absolute. Quaternion order is ``[w, x, y, z]``.
+    /// Omitted components keep the current pose values.
+    /// Use ``quaternion_from_axis_angle`` to build a quaternion from an
+    /// axis and angle.
+    ///
+    /// Parameters
+    /// ----------
+    /// translation : list of float or None
+    ///     Absolute translation ``[tx, ty, tz]``. ``None`` keeps the current
+    ///     translation.
+    /// rotation_quaternion : list of float or None
+    ///     Absolute unit quaternion ``[w, x, y, z]``. ``None`` keeps the
+    ///     current rotation. Build from an axis and angle with
+    ///     ``quaternion_from_axis_angle``.
+    /// warn_outside_refinement : bool, default True
+    ///     If True, warn when the IB intersects cells below ``target_level``.
+    ///     When warnings raise exceptions, the current session stays unchanged.
+    /// copy : bool, default True
+    ///     Return independent writable arrays. False returns read-only arrays
+    ///     sharing cached background storage. Existing snapshots stay valid.
+    ///
+    /// Returns
+    /// -------
+    /// CfdAxisProjectedMesh
+    ///     Updated mesh snapshot with rebuilt immersed-boundary payload.
+    ///
+    /// Raises
+    /// ------
+    /// ValueError
+    ///     If a pose is nonfinite, or requested refinement is invalid or exceeds
+    ///     max_cells (remesh only).
+    /// RuntimeError
+    ///     If geometry computation fails, or the session is already borrowed by
+    ///     a concurrent or reentrant operation.
+    /// UserWarning
+    ///     Emitted when requested and the boundary crosses cells below target_level;
+    ///     raised as an exception when warnings are configured as errors.
+    /// TypeError, OverflowError
+    ///     If an argument cannot be converted to the required native type.
+    ///
+    /// Notes
+    /// -----
+    /// Pose values are absolute, not increments. Rotation is about the original
+    /// coordinate origin, followed by translation, in the surface's length units.
+    /// Finite nonzero quaternions are normalized. For Python compatibility, a
+    /// finite quaternion with squared norm <= float64 epsilon becomes identity.
+    /// Omitted pose components retain their current values.
+    /// All fallible computation, warnings, and Python publication complete before
+    /// the state is committed; failure leaves the current mesh, pose, and settings
+    /// unchanged. Previously returned snapshots remain valid.
+    ///
+    /// Cell and face indices stay fixed. copy=False reuses the cached background
+    /// storage but publishes newly computed boundary data.
     fn update_ib(
         &mut self,
         py: Python<'_>,
         translation: Option<[f64; 3]>,
         rotation_quaternion: Option<[f64; 4]>,
         warn_outside_refinement: bool,
-    ) -> PyResult<CfdAxisProjectedMesh> {
-        self.set_pose_from_args(translation, rotation_quaternion);
-
-        let cell_types = rebuild_axis_projected_ib(
-            &self.forest,
-            &self.geom,
-            &self.ibm_mesh,
-            &mut self.mesh,
-            &self.pose,
-        );
-
-        Self::emit_under_refined_warning(
-            py,
-            warn_outside_refinement,
-            &self.forest,
-            &cell_types,
-            self.target_level,
-        )?;
-
-        Ok(CfdAxisProjectedMesh::from_core(py, self.mesh.clone()))
+        copy: bool,
+    ) -> PyResult<Py<CfdAxisProjectedMesh>> {
+        let pose = arguments::pose(translation, rotation_quaternion);
+        let update = py
+            .detach(|| self.inner.prepare_update(pose))
+            .map_err(to_python)?;
+        self.publish(py, update, warn_outside_refinement, copy)
     }
-
-    /// Rebuilds the AMR background mesh and IB payload for the current (or updated) pose.
-    #[pyo3(signature = (
-        target_level = None,
-        refinement_regions = None,
-        translation = None,
-        rotation_quaternion = None,
-        warn_outside_refinement = true
-    ))]
+    #[pyo3(signature = (target_level = None, refinement_regions = None, translation = None, rotation_quaternion = None, warn_outside_refinement = true, *, copy = true))]
+    #[allow(clippy::too_many_arguments)]
+    /// Rebuilds the AMR background mesh and IB payload for the current pose.
+    ///
+    /// Parameters
+    /// ----------
+    /// target_level : int or None
+    ///     Surface refinement target before final uniform leaf refinement.
+    ///     ``None`` keeps the current target level.
+    /// refinement_regions : list of tuple[list[float], list[float], int] | None
+    ///     Optional region refinement requests as ``(min, max, level)``.
+    ///     ``None`` keeps the current region list.
+    /// translation : list of float or None
+    ///     Absolute translation ``[tx, ty, tz]``. ``None`` keeps the current
+    ///     translation.
+    /// rotation_quaternion : list of float or None
+    ///     Absolute unit quaternion ``[w, x, y, z]``. ``None`` keeps the
+    ///     current rotation. Build from an axis and angle with
+    ///     ``quaternion_from_axis_angle``.
+    /// warn_outside_refinement : bool, default True
+    ///     If True, warn when the IB intersects cells below ``target_level``.
+    ///     When warnings raise exceptions, the current session stays unchanged.
+    /// copy : bool, default True
+    ///     Return independent writable arrays. False returns read-only arrays
+    ///     sharing cached background storage. Existing snapshots stay valid.
+    ///
+    /// Returns
+    /// -------
+    /// CfdAxisProjectedMesh
+    ///     Newly built mesh snapshot after AMR and IB reconstruction.
+    ///
+    /// Raises
+    /// ------
+    /// ValueError
+    ///     If a pose is nonfinite, or requested refinement is invalid or exceeds
+    ///     max_cells (remesh only).
+    /// RuntimeError
+    ///     If geometry computation fails, or the session is already borrowed by
+    ///     a concurrent or reentrant operation.
+    /// UserWarning
+    ///     Emitted when requested and the boundary crosses cells below target_level;
+    ///     raised as an exception when warnings are configured as errors.
+    /// TypeError, OverflowError
+    ///     If an argument cannot be converted to the required native type.
+    ///
+    /// Notes
+    /// -----
+    /// Pose values are absolute, not increments. Rotation is about the original
+    /// coordinate origin, followed by translation, in the surface's length units.
+    /// Finite nonzero quaternions are normalized. For Python compatibility, a
+    /// finite quaternion with squared norm <= float64 epsilon becomes identity.
+    /// Omitted pose components retain their current values.
+    /// All fallible computation, warnings, and Python publication complete before
+    /// the state is committed; failure leaves the current mesh, pose, and settings
+    /// unchanged. Previously returned snapshots remain valid.
+    ///
+    /// refinement_regions=None retains existing regions; [] clears them.
+    /// The manager's max_cells and n_leaf_refinement remain in effect.
+    /// Cell and face indices may change even if the cell count does not. Rebuild
+    /// solver caches and transfer solution fields separately; this API does not
+    /// transfer them. copy=False publishes the new background as read-only data.
     fn remesh(
         &mut self,
         py: Python<'_>,
         target_level: Option<u8>,
-        refinement_regions: Option<Vec<RefinementRegion>>,
+        refinement_regions: Option<Vec<RegionInput>>,
         translation: Option<[f64; 3]>,
         rotation_quaternion: Option<[f64; 4]>,
         warn_outside_refinement: bool,
-    ) -> PyResult<CfdAxisProjectedMesh> {
-        self.set_pose_from_args(translation, rotation_quaternion);
-        if let Some(level) = target_level {
-            self.target_level = level;
-        }
-        if let Some(regions) = refinement_regions {
-            self.refinement_regions = regions;
-        }
-
-        let (forest, geom) = build_forest_for_ibm(
-            &self.config,
-            &self.ibm_mesh,
-            self.target_level,
-            &self.refinement_regions,
-            &self.pose,
-        )?;
-        self.forest = forest;
-        self.geom = geom;
-
-        let cell_types =
-            solver::mark_intersecting_cells(&self.forest, &self.geom, &self.ibm_mesh, &self.pose);
-        self.mesh = fluxel_export::builder::build_axis_projected_mesh(
-            &self.forest,
-            &self.geom,
-            &self.ibm_mesh,
-            &cell_types,
-            &self.pose,
-        );
-
-        Self::emit_under_refined_warning(
-            py,
-            warn_outside_refinement,
-            &self.forest,
-            &cell_types,
-            self.target_level,
-        )?;
-
-        Ok(CfdAxisProjectedMesh::from_core(py, self.mesh.clone()))
+        copy: bool,
+    ) -> PyResult<Py<CfdAxisProjectedMesh>> {
+        let request = RemeshRequest {
+            target_level,
+            regions: refinement_regions.map(arguments::regions).transpose()?,
+            pose: arguments::pose(translation, rotation_quaternion),
+        };
+        let update = py
+            .detach(|| self.inner.prepare_remesh(request))
+            .map_err(to_python)?;
+        self.publish(py, update, warn_outside_refinement, copy)
     }
 }

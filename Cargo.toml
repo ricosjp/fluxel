@@ -5,7 +5,8 @@ members = [
     "crates/fluxel-sfc",
     "crates/fluxel-geometry",
     "crates/fluxel-ibm",
-    "crates/fluxel-export",
+    "crates/fluxel-mesh",
+    "crates/fluxel-engine",
     "crates/fluxel-pyo3"
 ]
 

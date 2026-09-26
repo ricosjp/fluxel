@@ -7,6 +7,8 @@ output_vtu: "examples/output/gcibm/gcibm_motorBike.vtu"
 
 target_level: 4
 n_leaf_refinement: 3
+# Optional cell-count limit; exceeding it fails instead of reducing refinement.
+max_cells: null  # e.g. 1000000; null means no user-specified limit
 base_resolution: [10, 4, 4]
 
 bounding_box:

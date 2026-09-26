@@ -1,0 +1,22 @@
+[package]
+name = "fluxel-engine"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+
+[dependencies]
+fluxel-core = { path = "../fluxel-core" }
+fluxel-sfc = { path = "../fluxel-sfc" }
+fluxel-geometry = { path = "../fluxel-geometry" }
+fluxel-mesh = { path = "../fluxel-mesh" }
+fluxel-ibm = { path = "../fluxel-ibm" }
+rayon.workspace = true
+stl_io = { version = "0.10.0", optional = true }
+wavefront_obj = { version = "11.0.0", optional = true }
+
+[features]
+default = ["mesh-io"]
+mesh-io = ["dep:stl_io", "dep:wavefront_obj"]
+
+[dev-dependencies]
+tempfile.workspace = true

@@ -4,11 +4,12 @@
 //! Python-usable classes.
 
 mod apibm_session;
+mod arguments;
 mod cfd_mesh;
 mod conversion;
+mod errors;
 mod forest;
 mod manager;
-mod pipeline;
 mod pose;
 
 use pyo3::prelude::*;

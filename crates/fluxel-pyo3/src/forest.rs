@@ -1,101 +1,184 @@
-//! Python `Forest` wrapper for manual AMR control.
-
-use crate::cfd_mesh::BoundingBox;
-use fluxel_core::Forest as CoreForest;
-use fluxel_geometry::{BoundingBox as CoreBoundingBox, Geometry};
-use pyo3::exceptions::PyValueError;
+//! Manual Python AMR delegates to the same engine policies as automatic generation.
+use crate::{arguments, cfd_mesh::BoundingBox, errors::to_python};
+use fluxel_engine::{BuildLimits, ManualGrid};
 use pyo3::prelude::*;
-
-/// Use case 2: `Forest` wrapper for manual AMR control.
+/// Low-level API for manual AMR control.
+///
+/// Initialize the Forest.
+///
+/// Parameters
+/// ----------
+/// bbox : BoundingBox
+///     The physical bounds of the overall domain.
+/// base_res : list of int
+///     The initial number of root blocks (trees) in [X, Y, Z] directions.
+///
+/// Raises
+/// ------
+/// ValueError
+///     If bounds are invalid or resolution is nonpositive or exceeds 2**26 roots.
+///
+/// Notes
+/// -----
+/// Creates populated level-0 cells, unlike the empty low-level Rust Forest.
+/// This Python API has no max_cells argument and does not inherit a manager's
+/// limit. Refinement changes cell ordering; flags refer to the current order.
 #[pyclass]
 pub struct Forest {
-    inner: CoreForest,
-    geom: Geometry,
+    inner: ManualGrid,
 }
-
 #[pymethods]
 impl Forest {
     #[new]
-    pub fn new(bbox: &BoundingBox, base_res: [u32; 3]) -> Self {
-        let core_bbox = CoreBoundingBox::new(bbox.min, bbox.max);
-        let geom = Geometry::new(core_bbox, base_res);
-        let mut inner = CoreForest::new(base_res);
-        inner.populate_root_cells();
-
-        Self { inner, geom }
+    /// Initialize the Forest.
+    ///
+    /// Parameters
+    /// ----------
+    /// bbox : BoundingBox
+    ///     The physical bounds of the overall domain.
+    /// base_res : list of int
+    ///     The initial number of root blocks (trees) in [X, Y, Z] directions.
+    ///
+    /// Raises
+    /// ------
+    /// ValueError
+    ///     If bounds are invalid or resolution is nonpositive or exceeds 2**26 roots.
+    ///
+    /// Notes
+    /// -----
+    /// Creates populated level-0 cells, unlike the empty low-level Rust Forest.
+    /// This Python API has no max_cells argument and does not inherit a manager's
+    /// limit. Refinement changes cell ordering; flags refer to the current order.
+    fn new(bbox: &BoundingBox, base_res: [u32; 3]) -> PyResult<Self> {
+        let bbox = fluxel_geometry::BoundingBox::new(bbox.min, bbox.max)
+            .map_err(|e| to_python(e.into()))?;
+        Ok(Self {
+            inner: ManualGrid::new(bbox, base_res, BuildLimits::default()).map_err(to_python)?,
+        })
     }
-
-    pub fn num_cells(&self) -> usize {
+    /// Returns the current total number of cells.
+    ///
+    /// Returns
+    /// -------
+    /// int
+    ///     Number of cells.
+    fn num_cells(&self) -> usize {
         self.inner.num_cells()
     }
-
-    /// Batch-refines cells where the corresponding flag is `true`.
-    pub fn refine_by_flags(&mut self, flags: Vec<bool>) -> PyResult<()> {
-        if flags.len() != self.inner.num_cells() {
-            return Err(PyValueError::new_err("Flags length must match num_cells"));
-        }
-        self.inner.refine_by_flags(&flags);
-        Ok(())
+    /// Refines cells based on a boolean mask.
+    ///
+    /// Parameters
+    /// ----------
+    /// flags : list[bool]
+    ///     A boolean list of length `num_cells()`. True indicates refinement.
+    ///
+    /// Notes
+    /// -----
+    /// Each flagged leaf is replaced by eight children; level-32 leaves are skipped.
+    /// Does not automatically restore 2:1 balance. Mutates this forest in place.
+    ///
+    /// Raises
+    /// ------
+    /// ValueError
+    ///     If the flag count differs from num_cells() or cell-count arithmetic
+    ///     overflows. Validation failure leaves the forest unchanged.
+    fn refine_by_flags(&mut self, py: Python<'_>, flags: Vec<bool>) -> PyResult<()> {
+        py.detach(|| self.inner.refine_by_flags(&flags))
+            .map_err(to_python)
     }
-
-    /// Batch-coarsens sibling cells where the corresponding flag is `true`.
-    pub fn coarsen_by_flags(&mut self, flags: Vec<bool>) -> PyResult<()> {
-        if flags.len() != self.inner.num_cells() {
-            return Err(PyValueError::new_err("Flags length must match num_cells"));
-        }
-        self.inner.coarsen_by_flags(&flags);
-        Ok(())
+    /// Coarsens sibling cells back to their parent based on a boolean mask.
+    ///
+    /// Parameters
+    /// ----------
+    /// flags : list[bool]
+    ///     A boolean list of length `num_cells()`.
+    ///
+    /// Notes
+    /// -----
+    /// Only complete groups of eight flagged siblings are replaced by their parent.
+    /// Other flagged cells are left unchanged. Does not automatically restore
+    /// 2:1 balance. Mutates this forest in place and changes cell indices.
+    ///
+    /// Raises
+    /// ------
+    /// ValueError
+    ///     If the flag count differs from num_cells(); the forest is unchanged.
+    fn coarsen_by_flags(&mut self, py: Python<'_>, flags: Vec<bool>) -> PyResult<()> {
+        py.detach(|| self.inner.coarsen_by_flags(&flags))
+            .map_err(to_python)
     }
-
-    /// Refines cells whose AABB overlaps `[min, max]` until `target_level` (refinementRegions-style).
-    pub fn refine_by_bbox(
+    /// Refines all cells that intersect with the specified bounding box
+    /// up to the given target level.
+    ///
+    /// Parameters
+    /// ----------
+    /// min : list[float]
+    ///     The [x, y, z] coordinates of the minimum corner of the box.
+    /// max : list[float]
+    ///     The [x, y, z] coordinates of the maximum corner of the box.
+    /// target_level : int
+    ///     The desired refinement level inside the box.
+    ///
+    /// Notes
+    /// -----
+    /// Only positive-volume overlap counts; touching a region face is insufficient.
+    /// Coordinates are in the domain's physical units. Does not coarsen finer cells
+    /// or automatically restore balance. Mutates in place after successful work.
+    ///
+    /// Raises
+    /// ------
+    /// ValueError
+    ///     If corners are nonfinite or not strictly ordered, target_level is outside
+    ///     [0, 32], or cell-count arithmetic overflows. Failure leaves the forest
+    ///     unchanged.
+    fn refine_by_bbox(
         &mut self,
+        py: Python<'_>,
         min: [f64; 3],
         max: [f64; 3],
         target_level: u8,
     ) -> PyResult<()> {
-        for _ in 0..target_level {
-            let mut flags = vec![false; self.inner.num_cells()];
-            let mut should_refine = false;
-            (0..self.inner.num_cells()).for_each(|i| {
-                let key = self.inner.keys()[i];
-                if key.level() < target_level {
-                    let logical = key.to_logical();
-                    let (center, size) = self.geom.cell_bounds(&logical);
-
-                    let half_x = size[0] / 2.0;
-                    let half_y = size[1] / 2.0;
-                    let half_z = size[2] / 2.0;
-
-                    let c_min = [center[0] - half_x, center[1] - half_y, center[2] - half_z];
-                    let c_max = [center[0] + half_x, center[1] + half_y, center[2] + half_z];
-
-                    let overlap_x = c_min[0] < max[0] && c_max[0] > min[0];
-                    let overlap_y = c_min[1] < max[1] && c_max[1] > min[1];
-                    let overlap_z = c_min[2] < max[2] && c_max[2] > min[2];
-
-                    if overlap_x && overlap_y && overlap_z {
-                        flags[i] = true;
-                        should_refine = true;
-                    }
-                }
-            });
-
-            if !should_refine {
-                break;
-            }
-            self.inner.refine_by_flags(&flags);
-        }
-        Ok(())
+        let region = arguments::regions(vec![(min, max, target_level)])?.remove(0);
+        py.detach(|| self.inner.refine_region(region))
+            .map_err(to_python)
     }
-
-    /// Enforces the 2:1 neighbour-balance constraint.
-    pub fn enforce_2_to_1_balance(&mut self) {
-        self.inner.enforce_2_to_1_balance();
+    /// Enforces the 2:1 balancing constraint across the entire mesh,
+    /// ensuring adjacent cells differ by at most one refinement level.
+    ///
+    /// Notes
+    /// -----
+    /// Checks face, edge and corner neighbours (26 probes); only refines coarse
+    /// cells. Mutates in place and may change cell indices.
+    ///
+    /// Raises
+    /// ------
+    /// ValueError
+    ///     If cell-count arithmetic overflows. Failure leaves the forest unchanged.
+    fn enforce_2_to_1_balance(&mut self, py: Python<'_>) -> PyResult<()> {
+        py.detach(|| self.inner.enforce_2_to_1_balance())
+            .map_err(to_python)
     }
-
-    /// Uniformly refines all cells by the specified number of times.
-    pub fn uniform_refinement(&mut self, n_times: u8) {
-        self.inner.uniform_refinement(n_times);
+    /// Applies uniform refinement to every cell in the mesh, repeated `n_times`
+    /// times.
+    ///
+    /// Parameters
+    /// ----------
+    /// n_times : int
+    ///     The number of times the uniform refinement is applied.
+    ///
+    /// Notes
+    /// -----
+    /// Zero is a no-op; every additional level multiplies cell count by eight.
+    /// Preserves an existing 2:1 balance but does not fix an unbalanced forest.
+    /// Mutates in place and changes cell indices.
+    ///
+    /// Raises
+    /// ------
+    /// ValueError
+    ///     If the resulting level exceeds 32 or cell-count arithmetic overflows.
+    ///     Validation failure leaves the forest unchanged.
+    fn uniform_refinement(&mut self, py: Python<'_>, n_times: u8) -> PyResult<()> {
+        py.detach(|| self.inner.uniform_refinement(n_times))
+            .map_err(to_python)
     }
 }

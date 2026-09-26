@@ -34,7 +34,8 @@ pytest:
     - cargo llvm-cov show-env --sh > .llvm-cov-env
     - . ./.llvm-cov-env
     - cargo llvm-cov clean --workspace
-    - cargo test
+    - cargo test --workspace
+    - cargo test -p fluxel-engine --no-default-features
     - uv run maturin develop
     - uv run pytest tests --cov=src --cov-report xml
     - cargo llvm-cov report --cobertura --output-path coverage.xml

@@ -1,6 +1,6 @@
 //! 2:1 balance (26-neighbour stencil): refine coarse cells until adjacent level gaps are ≤ 1.
 
-use crate::forest::Forest;
+use crate::{Forest, ForestError};
 use rayon::prelude::*;
 
 /// Iterates the 26 probe offsets around a cell of edge length `size` (logical units).
@@ -53,7 +53,10 @@ impl Forest {
     ///
     /// When a cell at level `L` touches a neighbour at most `L-2`, the coarser neighbour is
     /// marked for [`Forest::refine_by_flags`]. Repeats until no flags are set.
-    pub fn enforce_2_to_1_balance(&mut self) {
+    /// Returns CellLimit if a required split overflows or exceeds the configured limit.
+    /// Earlier successful iterations remain applied on failure. Clone the forest first
+    /// for transactional behavior, as fluxel-engine's ManualGrid does.
+    pub fn enforce_2_to_1_balance(&mut self) -> Result<(), ForestError> {
         loop {
             let mut flags = vec![false; self.keys.len()];
             let neighbor_sets: Vec<Vec<usize>> = (0..self.keys.len())
@@ -75,8 +78,16 @@ impl Forest {
                 break;
             }
 
-            self.refine_by_flags(&flags);
+            self.refine_by_flags(&flags)?;
         }
+        Ok(())
+    }
+
+    /// Check 26-neighbour level gaps without mutation; does not validate complete coverage.
+    pub fn is_balanced(&self) -> bool {
+        (0..self.num_cells())
+            .into_par_iter()
+            .all(|i| balance_refine_indices_for_cell(self, i).is_empty())
     }
 }
 
@@ -86,11 +97,11 @@ mod tests {
 
     #[test]
     fn test_2_to_1_balance() {
-        let mut forest = Forest::new([1, 1, 1]);
+        let mut forest = Forest::new([1, 1, 1]).unwrap();
         forest.populate_root_cells();
 
         // L=0 -> refine the whole domain to L=1 (8 cells)
-        forest.refine_by_flags(&[true]);
+        forest.refine_by_flags(&[true]).unwrap();
 
         // Refine only the cell that contains the origin to L=2 (not always keys[0] in SFC order)
         let mut flags2 = vec![false; forest.num_cells()];
@@ -99,19 +110,19 @@ mod tests {
             .binary_search(&forest.find_cell_containing(0, 0, 0, 0).unwrap())
             .unwrap();
         flags2[i2] = true;
-        forest.refine_by_flags(&flags2);
+        forest.refine_by_flags(&flags2).unwrap();
 
         // Refine the first 8 keys to L=3 so the forest has a strong level imbalance to fix
         let mut flags3 = vec![false; forest.num_cells()];
         flags3.iter_mut().take(8).for_each(|f| *f = true);
-        forest.refine_by_flags(&flags3);
+        forest.refine_by_flags(&flags3).unwrap();
 
         // Before enforcement, some 26-probe neighbour pair should differ by at least 2 levels
         let max_level_diff_before = compute_max_level_diff(&forest);
         assert!(max_level_diff_before >= 2);
 
         // Apply 2:1 balance
-        forest.enforce_2_to_1_balance();
+        forest.enforce_2_to_1_balance().unwrap();
 
         // Adjacent level difference (26-probe sampling) must be at most 1
         let max_level_diff_after = compute_max_level_diff(&forest);

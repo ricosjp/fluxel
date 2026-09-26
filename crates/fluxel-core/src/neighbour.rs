@@ -139,7 +139,7 @@ mod tests {
     #[test]
     fn test_resolve_coord_cross_tree() {
         // Two trees along +X
-        let forest = Forest::new([2, 1, 1]);
+        let forest = Forest::new([2, 1, 1]).unwrap();
 
         let logical_max = (1i64 << MAX_LEVEL) - 1;
 
@@ -158,16 +158,16 @@ mod tests {
 
     #[test]
     fn test_face_neighbours_different_levels() {
-        let mut forest = Forest::new([1, 1, 1]);
+        let mut forest = Forest::new([1, 1, 1]).unwrap();
         forest.populate_root_cells();
 
         // 1. Refine the whole domain to L=1 (8 cells)
-        forest.refine_by_flags(&[true]);
+        forest.refine_by_flags(&[true]).unwrap();
 
         // 2. Refine one cell on the +X side (child_1) to L=2 — in Morton order it is index 1
         let mut refine_flags = vec![false; 8];
         refine_flags[1] = true;
-        forest.refine_by_flags(&refine_flags);
+        forest.refine_by_flags(&refine_flags).unwrap();
 
         // keys has 15 cells (7 at L=1 and 8 at L=2)
         assert_eq!(forest.num_cells(), 15);
