@@ -8,6 +8,8 @@ pub enum GeometryError {
     InvalidResolution,
     /// Nonfinite pose/axis-angle inputs, or a zero quaternion.
     InvalidPose,
+    /// Cylindrical bounds are nonfinite, empty, nonpositive in radius, or wider than one turn.
+    InvalidCylindricalDomain,
 }
 impl fmt::Display for GeometryError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -17,6 +19,9 @@ impl fmt::Display for GeometryError {
                 "base_res must be nonzero with at most 2^26 trees and finite positive cell sizes"
             }
             Self::InvalidPose => "pose must be finite and quaternion must have nonzero length",
+            Self::InvalidCylindricalDomain => {
+                "cylindrical domain requires finite bounds, 0 < r_min < r_max, a positive extent of at most one turn, and root angle at most π/2"
+            }
         })
     }
 }

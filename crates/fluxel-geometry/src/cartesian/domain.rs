@@ -1,4 +1,6 @@
-//! Axis-aligned bounding boxes and mapping from logical octree cells to physical space.
+//! Cartesian domain: axis-aligned bounds and per-cell edge lengths.
+//!
+//! The cylindrical counterpart is [`crate::cylindrical::domain`].
 
 use crate::GeometryError;
 use fluxel_sfc::{LogicalCell, MAX_LEVEL};

@@ -1,6 +1,8 @@
-//! Map world-space points to forest global cell indices.
+//! Cartesian point location: world coordinates to a forest cell index.
+//!
+//! The cylindrical counterpart is [`crate::cylindrical::locate`].
 
-use crate::Geometry;
+use super::domain::Geometry;
 use fluxel_core::Forest;
 
 /// Resolves physical coordinates `[x, y, z]` to the finest cell `global_id` for the current
