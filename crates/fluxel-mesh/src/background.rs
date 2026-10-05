@@ -1,6 +1,6 @@
 use crate::{CellIndex, MeshId};
 use fluxel_core::{Axis, BalancedForest, Direction, Forest, ForestError};
-use fluxel_geometry::{CoordinateType, Geometry};
+use fluxel_geometry::{CoordinateType, CylindricalGeometry, Geometry, ParameterBox, SpatialDomain};
 use std::{fmt, sync::Arc};
 
 #[derive(Debug)]
@@ -20,7 +20,7 @@ impl fmt::Display for MeshError {
         match self {
             Self::Forest(e) => e.fmt(f),
             Self::Unbalanced => f.write_str("background mesh requires a 2:1 balanced forest"),
-            Self::GeometryMismatch => f.write_str("forest and geometry resolutions do not match"),
+            Self::GeometryMismatch => f.write_str("forest and geometry do not match"),
         }
     }
 }
@@ -41,8 +41,18 @@ pub struct MeshTopology {
     pub(crate) internal_owner: Vec<CellIndex>,
     pub(crate) internal_neighbour: Vec<CellIndex>,
     pub(crate) internal_axis: Vec<Axis>,
+    /// Parameter box of each internal face. The face axis has equal limits.
+    pub(crate) internal_bounds: Vec<ParameterBox>,
+    /// Area vector from the owner toward the neighbour.
+    pub(crate) internal_area: Vec<[f64; 3]>,
+    /// Periodic wraps crossed by the positive neighbour. Zero when the axis does not wrap.
+    pub(crate) internal_winding: Vec<i8>,
     pub(crate) boundary_owner: Vec<CellIndex>,
     pub(crate) boundary_direction: Vec<Direction>,
+    /// Parameter box of each domain face.
+    pub(crate) boundary_bounds: Vec<ParameterBox>,
+    /// Outward area vector of each domain face.
+    pub(crate) boundary_area: Vec<[f64; 3]>,
 }
 impl MeshTopology {
     /// Negative-axis cell for each internal-face record.
@@ -57,6 +67,18 @@ impl MeshTopology {
     pub fn internal_axis(&self) -> &[Axis] {
         &self.internal_axis
     }
+    /// Parameter box of each internal face, including coarse/fine partial faces.
+    pub fn internal_bounds(&self) -> &[ParameterBox] {
+        &self.internal_bounds
+    }
+    /// Area vector of each internal face, pointing from owner toward neighbour.
+    pub fn internal_area(&self) -> &[[f64; 3]] {
+        &self.internal_area
+    }
+    /// Periodic wraps of each internal face. A full-turn seam has winding 1.
+    pub fn internal_winding(&self) -> &[i8] {
+        &self.internal_winding
+    }
     /// Cell adjacent to each outer-domain face.
     pub fn boundary_owner(&self) -> &[CellIndex] {
         &self.boundary_owner
@@ -65,25 +87,60 @@ impl MeshTopology {
     pub fn boundary_direction(&self) -> &[Direction] {
         &self.boundary_direction
     }
+    /// Parameter box of each domain face.
+    pub fn boundary_bounds(&self) -> &[ParameterBox] {
+        &self.boundary_bounds
+    }
+    /// Outward area vector of each domain face.
+    pub fn boundary_area(&self) -> &[[f64; 3]] {
+        &self.boundary_area
+    }
     /// Number of internal-face records, including coarse/fine subfaces.
     pub fn n_internal_faces(&self) -> usize {
         self.internal_owner.len()
     }
 }
 #[derive(Debug, Default)]
-/// Physical cell centers and side lengths in forest key order and caller length units.
+/// Sample points and coordinate-aligned widths in forest key order.
+///
+/// Cartesian widths are the X/Y/Z edge lengths. Cylindrical widths are
+/// `[Δr, r Δθ, Δz]`, and each sample is the parameter midpoint mapped to world.
 pub struct CellGeometry {
     pub(crate) centers: Vec<[f64; 3]>,
     pub(crate) sizes: Vec<[f64; 3]>,
+    pub(crate) volumes: Vec<f64>,
+    pub(crate) centroids: Vec<[f64; 3]>,
+    pub(crate) corners: Vec<[[f64; 3]; 8]>,
 }
 impl CellGeometry {
-    /// Physical X/Y/Z cell centers, one row per background cell.
+    /// World sample point of each background cell.
+    ///
+    /// Cartesian samples are the box centers. Cylindrical samples are parameter
+    /// midpoints mapped to world, which differ from the volume centroids.
     pub fn centers(&self) -> &[[f64; 3]] {
         &self.centers
     }
-    /// Physical X/Y/Z side lengths, one row per background cell.
+    /// Coordinate-aligned widths of each background cell.
+    ///
+    /// Cartesian widths are the edge lengths. Cylindrical widths are
+    /// `[Δr, r Δθ, Δz]`, not the world AABB and not a volume factorization.
     pub fn sizes(&self) -> &[[f64; 3]] {
         &self.sizes
+    }
+    /// Exact cell volumes.
+    pub fn volumes(&self) -> &[f64] {
+        &self.volumes
+    }
+    /// Volume centroids in world coordinates.
+    pub fn centroids(&self) -> &[[f64; 3]] {
+        &self.centroids
+    }
+    /// Eight world corners of each cell, in VTK hexahedron order.
+    ///
+    /// Cylindrical corners are the parameter-box corners. Edges between them are
+    /// straight display edges, while a constant-radius face is curved.
+    pub fn corners(&self) -> &[[[f64; 3]; 8]] {
+        &self.corners
     }
 }
 #[derive(Debug)]
@@ -92,6 +149,7 @@ pub struct BackgroundMesh {
     pub(crate) id: MeshId,
     pub(crate) topology: MeshTopology,
     pub(crate) geometry: CellGeometry,
+    pub(crate) coordinate_type: CoordinateType,
 }
 impl BackgroundMesh {
     /// Identity of this background; a rebuild receives a new ID.
@@ -110,9 +168,9 @@ impl BackgroundMesh {
     pub fn n_cells(&self) -> usize {
         self.geometry.centers.len()
     }
-    /// Cartesian; other coordinate mappings are not implemented.
+    /// Coordinate system used to derive centers, widths, and face connectivity.
     pub fn coordinate_type(&self) -> CoordinateType {
-        CoordinateType::Cartesian
+        self.coordinate_type
     }
 }
 /// Couples a validated forest to its derived arrays. Only immutable references escape.
@@ -120,7 +178,7 @@ impl BackgroundMesh {
 #[derive(Debug)]
 pub struct GridContext {
     forest: Forest,
-    geometry: Geometry,
+    domain: SpatialDomain,
     background: Arc<BackgroundMesh>,
 }
 impl GridContext {
@@ -131,26 +189,39 @@ impl GridContext {
         if forest.base_resolution() != geometry.base_resolution() {
             return Err(MeshError::GeometryMismatch);
         }
-        forest.validate_coverage()?;
-        if !forest.is_balanced() {
-            return Err(MeshError::Unbalanced);
-        }
-        Self::build(forest, geometry)
+        Self::from_domain(forest, SpatialDomain::Cartesian(geometry))
+    }
+    /// Build a cylindrical background. Root angle must be at most `π/2`.
+    ///
+    /// Forest periodicity is authoritative: any of ``(r, θ, z)`` may wrap.
+    pub fn from_cylindrical(
+        forest: Forest,
+        geometry: CylindricalGeometry,
+    ) -> Result<Self, MeshError> {
+        Self::from_domain(forest, SpatialDomain::Cylindrical(geometry))
     }
     /// Consumes proof of complete coverage and balance, avoiding another neighbour scan.
     /// Still checks root-resolution agreement; consumes both inputs on success or failure.
     pub fn from_balanced(forest: BalancedForest, geometry: Geometry) -> Result<Self, MeshError> {
-        Self::build(forest.into_forest(), geometry)
-    }
-    /// Extract deterministic immutable arrays after coverage/balance have been established.
-    fn build(forest: Forest, geometry: Geometry) -> Result<Self, MeshError> {
+        let forest = forest.into_forest();
         if forest.base_resolution() != geometry.base_resolution() {
             return Err(MeshError::GeometryMismatch);
         }
-        let background = Arc::new(crate::build::build_background(&forest, &geometry));
+        Self::build(forest, SpatialDomain::Cartesian(geometry))
+    }
+    fn from_domain(forest: Forest, domain: SpatialDomain) -> Result<Self, MeshError> {
+        forest.validate_coverage()?;
+        if !forest.is_balanced() {
+            return Err(MeshError::Unbalanced);
+        }
+        Self::build(forest, domain)
+    }
+    /// Extract deterministic immutable arrays after coverage/balance have been established.
+    fn build(forest: Forest, domain: SpatialDomain) -> Result<Self, MeshError> {
+        let background = Arc::new(crate::build::build_background(&forest, &domain)?);
         Ok(Self {
             forest,
-            geometry,
+            domain,
             background,
         })
     }
@@ -159,8 +230,8 @@ impl GridContext {
         &self.forest
     }
     /// Physical mapping used to derive this background.
-    pub fn geometry(&self) -> &Geometry {
-        &self.geometry
+    pub fn domain(&self) -> &SpatialDomain {
+        &self.domain
     }
     /// Shared background arrays; cloning the Arc does not retain the forest.
     pub fn background(&self) -> &Arc<BackgroundMesh> {
