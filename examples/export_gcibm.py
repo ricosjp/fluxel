@@ -14,17 +14,35 @@ import time
 import numpy as np
 import pyvista as pv
 import yaml
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
-from fluxel import BoundingBox, CfdGhostCellMesh, FluxelManager
+from fluxel import (
+    BoundingBox,
+    CfdGhostCellMesh,
+    Cylindrical,
+    Float3,
+    FluxelManager,
+    Int3,
+)
 
 
 class BoundingBoxConfig(BaseModel, frozen=True):
     """Axis-aligned domain bounding box (min / max corners)."""
 
-    min: list[float, float, float]
-    max: list[float, float, float]
+    min: Float3
+    max: Float3
 
+
+class CylindricalDomainConfig(BaseModel, frozen=True):
+    """Annular sector or full turn about world Z. Angles are radians."""
+
+    origin: Float3
+    r_min: float
+    r_max: float
+    theta_start: float
+    theta_extent: float
+    z_min: float
+    z_max: float
 
 class GcibmExportConfig(BaseModel, frozen=True):
     """Validated GCIBM export settings loaded from YAML."""
@@ -36,9 +54,16 @@ class GcibmExportConfig(BaseModel, frozen=True):
     target_level: int = 3
     n_leaf_refinement: int = 3
     max_cells: int | None = Field(default=None, gt=0, strict=True)
-    base_resolution: list[int, int, int]
-    bounding_box: BoundingBoxConfig = Field(default_factory=BoundingBoxConfig)
-    fluid_seed_point: list[float, float, float]
+    base_resolution: Int3
+    bounding_box: BoundingBoxConfig | None = None
+    cylindrical: CylindricalDomainConfig | None = None
+    fluid_seed_point: Float3
+
+    @model_validator(mode="after")
+    def _one_domain(self) -> "GcibmExportConfig":
+        if (self.bounding_box is None) == (self.cylindrical is None):
+            raise ValueError("specify exactly one of bounding_box or cylindrical")
+        return self
 
     @field_validator("input_mesh", mode="after")
     @classmethod
@@ -53,9 +78,7 @@ class GcibmExportConfig(BaseModel, frozen=True):
 
     @field_validator("base_resolution", mode="after")
     @classmethod
-    def _validate_base_resolution(
-        cls, v: list[int, int, int]
-    ) -> list[int, int, int]:
+    def _validate_base_resolution(cls, v: Int3) -> Int3:
         for n in v:
             if n < 1:
                 msg = "base_resolution entries must be positive integers"
@@ -86,71 +109,24 @@ def load_gcibm_config(path: pathlib.Path) -> GcibmExportConfig:
     return GcibmExportConfig.model_validate(raw)
 
 
-def mesh_to_unstructured_grid(
-    cell_centers: np.ndarray, cell_sizes: np.ndarray
-) -> pv.UnstructuredGrid:
+def mesh_to_unstructured_grid(cell_corners: np.ndarray) -> pv.UnstructuredGrid:
     """
-    Converts cell centers and sizes into a UnstructuredGrid of Hexahedrons.
+    Build hexahedra from VTK corner order.
 
     Parameters
     ----------
-    cell_centers : np.ndarray
-        The (N, 3) array of cell center coordinates.
-    cell_sizes : np.ndarray
-        The (N, 3) array of cell sizes.
+    cell_corners : np.ndarray
+        World corners of shape (N, 8, 3). Cartesian corners match the former
+        center-and-size boxes. Cylindrical corners are parameter corners.
 
     Returns
     -------
     pv.UnstructuredGrid
         The generated UnstructuredGrid.
     """
-    n_cells = len(cell_centers)
-
-    hx = cell_sizes[:, 0] / 2.0
-    hy = cell_sizes[:, 1] / 2.0
-    hz = cell_sizes[:, 2] / 2.0
-    cx = cell_centers[:, 0]
-    cy = cell_centers[:, 1]
-    cz = cell_centers[:, 2]
-
-    # VTK Hexahedron node ordering
-    # 0: -x, -y, -z
-    # 1: +x, -y, -z
-    # 2: +x, +y, -z
-    # 3: -x, +y, -z
-    # 4: -x, -y, +z
-    # 5: +x, -y, +z
-    # 6: +x, +y, +z
-    # 7: -x, +y, +z
-    pts = np.empty((n_cells, 8, 3), dtype=np.float64)
-
-    pts[:, 0, 0] = cx - hx
-    pts[:, 0, 1] = cy - hy
-    pts[:, 0, 2] = cz - hz
-    pts[:, 1, 0] = cx + hx
-    pts[:, 1, 1] = cy - hy
-    pts[:, 1, 2] = cz - hz
-    pts[:, 2, 0] = cx + hx
-    pts[:, 2, 1] = cy + hy
-    pts[:, 2, 2] = cz - hz
-    pts[:, 3, 0] = cx - hx
-    pts[:, 3, 1] = cy + hy
-    pts[:, 3, 2] = cz - hz
-
-    pts[:, 4, 0] = cx - hx
-    pts[:, 4, 1] = cy - hy
-    pts[:, 4, 2] = cz + hz
-    pts[:, 5, 0] = cx + hx
-    pts[:, 5, 1] = cy - hy
-    pts[:, 5, 2] = cz + hz
-    pts[:, 6, 0] = cx + hx
-    pts[:, 6, 1] = cy + hy
-    pts[:, 6, 2] = cz + hz
-    pts[:, 7, 0] = cx - hx
-    pts[:, 7, 1] = cy + hy
-    pts[:, 7, 2] = cz + hz
-
-    points = pts.reshape(-1, 3)
+    corners = np.asarray(cell_corners, dtype=np.float64)
+    n_cells = corners.shape[0]
+    points = corners.reshape(-1, 3)
 
     # Connectivity array for PyVista: [n_points, p0, p1, p2, p3, p4, p5, p6, p7]
     cells = np.empty((n_cells, 9), dtype=np.int64)
@@ -247,13 +223,13 @@ def export_gcibm_mesh(
         Path to the output VTU file.
     """
     # 1. セルメッシュの作成
-    grid = mesh_to_unstructured_grid(mesh.cell_centers, mesh.cell_sizes)
+    grid = mesh_to_unstructured_grid(mesh.cell_corners)
 
     # セルデータの割り当て
     is_ghost_cell = np.zeros(len(mesh.cell_centers), dtype=bool)
     is_ghost_cell[mesh.gc_cell_ids] = True
     grid.cell_data["cell_sizes"] = mesh.cell_sizes
-    grid.cell_data["cell_volume"] = np.prod(mesh.cell_sizes, axis=1)
+    grid.cell_data["cell_volume"] = mesh.cell_volumes
     grid.cell_data["is_fluid_cell"] = mesh.gc_is_fluid
     grid.cell_data["is_ghost_cell"] = is_ghost_cell
 
@@ -290,10 +266,6 @@ if __name__ == "__main__":
     print("=== Fluxel One-Stop GCIBM Mesh Generator ===")
 
     # 1. ドメインの設定
-    bbox = BoundingBox(
-        min=cfg.bounding_box.min,
-        max=cfg.bounding_box.max,
-    )
     base_res = cfg.base_resolution
     target_level = cfg.target_level
     n_leaf_refinement = cfg.n_leaf_refinement
@@ -302,7 +274,17 @@ if __name__ == "__main__":
     fluid_seed = cfg.fluid_seed_point
 
     print(f"Config file: {args.config.resolve()}")
-    print(f"Domain Bounds: Min {bbox.min} Max {bbox.max}")
+    if cfg.cylindrical is None:
+        assert cfg.bounding_box is not None
+        print(
+            f"Domain Bounds: Min {cfg.bounding_box.min} Max {cfg.bounding_box.max}"
+        )
+    else:
+        print(
+            "Cylindrical domain: "
+            f"r [{cfg.cylindrical.r_min}, {cfg.cylindrical.r_max}], "
+            f"theta [{cfg.cylindrical.theta_start}, {cfg.cylindrical.theta_extent}]"
+        )
     print(f"Base Resolution: {base_res}")
     print(f"Target Level: {target_level}")
     print(f"Number of Leaf Refinements: {n_leaf_refinement}")
@@ -315,12 +297,30 @@ if __name__ == "__main__":
     print(f"Fluid seed point: {fluid_seed}")
 
     # 2. FluxelManager の初期化
-    manager = FluxelManager(
-        bbox,
-        base_res=base_res,
-        n_leaf_refinement=n_leaf_refinement,
-        max_cells=cfg.max_cells,
-    )
+    if cfg.cylindrical is None:
+        assert cfg.bounding_box is not None
+        manager = FluxelManager(
+            BoundingBox(min=cfg.bounding_box.min, max=cfg.bounding_box.max),
+            base_res=base_res,
+            n_leaf_refinement=n_leaf_refinement,
+            max_cells=cfg.max_cells,
+        )
+    else:
+        domain = cfg.cylindrical
+        manager = FluxelManager(
+            Cylindrical(
+                domain.origin,
+                domain.r_min,
+                domain.r_max,
+                domain.theta_start,
+                domain.theta_extent,
+                domain.z_min,
+                domain.z_max,
+            ),
+            base_res=base_res,
+            n_leaf_refinement=n_leaf_refinement,
+            max_cells=cfg.max_cells,
+        )
     if not mesh_path.exists():
         raise SystemExit(f"Input mesh file does not exist: {mesh_path}")
 

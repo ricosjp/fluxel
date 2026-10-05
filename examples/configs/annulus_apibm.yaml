@@ -1,0 +1,31 @@
+# Full-turn cylindrical APIBM export for export_apibm.py.
+#
+# Run from the repository root:
+#   uv run python examples/export_apibm.py -c examples/configs/annulus_apibm.yaml
+#
+# base_resolution is the root count along (r, theta, z). A full turn needs at
+# least four angular roots. Refinement tuples are (r, theta, z), not world boxes.
+# A region may cross the seam by setting max[1] < min[1].
+
+input_mesh: "examples/geometry/annulus_baffle.obj"
+output_vtu: "examples/output/apibm/apibm_annulus.vtu"
+
+target_level: 1
+n_leaf_refinement: 0
+max_cells: null
+base_resolution: [2, 8, 2]
+
+cylindrical:
+  origin: [0.0, 0.0, 0.0]
+  r_min: 1.0
+  r_max: 2.0
+  theta_start: 0.0
+  theta_extent: 6.283185307179586
+  z_min: 0.0
+  z_max: 1.0
+
+refinement_regions:
+  - name: baffle
+    min: [1.2, 0.6, 0.25]
+    max: [1.8, 1.0, 0.75]
+    level: 1

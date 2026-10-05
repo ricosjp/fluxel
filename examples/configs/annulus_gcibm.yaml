@@ -1,0 +1,26 @@
+# Full-turn cylindrical GCIBM export for export_gcibm.py.
+#
+# Run from the repository root:
+#   uv run python examples/export_gcibm.py -c examples/configs/annulus_gcibm.yaml
+#
+# The obstacle is a closed box over one root sector. The fluid seed is the world
+# point at r = 1.5, theta = pi, z = 0.5, outside that box.
+
+input_mesh: "examples/geometry/annulus_obstacle.obj"
+output_vtu: "examples/output/gcibm/gcibm_annulus.vtu"
+
+target_level: 1
+n_leaf_refinement: 0
+max_cells: null
+base_resolution: [2, 8, 2]
+
+cylindrical:
+  origin: [0.0, 0.0, 0.0]
+  r_min: 1.0
+  r_max: 2.0
+  theta_start: 0.0
+  theta_extent: 6.283185307179586
+  z_min: 0.0
+  z_max: 1.0
+
+fluid_seed_point: [-1.5, 0.0, 0.5]
