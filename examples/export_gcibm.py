@@ -44,6 +44,7 @@ class CylindricalDomainConfig(BaseModel, frozen=True):
     z_min: float
     z_max: float
 
+
 class GcibmExportConfig(BaseModel, frozen=True):
     """Validated GCIBM export settings loaded from YAML."""
 
@@ -62,7 +63,9 @@ class GcibmExportConfig(BaseModel, frozen=True):
     @model_validator(mode="after")
     def _one_domain(self) -> "GcibmExportConfig":
         if (self.bounding_box is None) == (self.cylindrical is None):
-            raise ValueError("specify exactly one of bounding_box or cylindrical")
+            raise ValueError(
+                "specify exactly one of bounding_box or cylindrical"
+            )
         return self
 
     @field_validator("input_mesh", mode="after")
@@ -277,13 +280,15 @@ if __name__ == "__main__":
     if cfg.cylindrical is None:
         assert cfg.bounding_box is not None
         print(
-            f"Domain Bounds: Min {cfg.bounding_box.min} Max {cfg.bounding_box.max}"
+            "Domain Bounds: "
+            f"Min {cfg.bounding_box.min} Max {cfg.bounding_box.max}"
         )
     else:
         print(
             "Cylindrical domain: "
             f"r [{cfg.cylindrical.r_min}, {cfg.cylindrical.r_max}], "
-            f"theta [{cfg.cylindrical.theta_start}, {cfg.cylindrical.theta_extent}]"
+            f"theta [{cfg.cylindrical.theta_start}, "
+            f"{cfg.cylindrical.theta_extent}]"
         )
     print(f"Base Resolution: {base_res}")
     print(f"Target Level: {target_level}")

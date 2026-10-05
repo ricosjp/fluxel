@@ -11,7 +11,7 @@ members = [
 ]
 
 [workspace.package]
-version = "0.2.0"
+version = "0.3.0"
 edition = "2021"
 description = "An extremely fast grid generation library for gridfoam, written in Rust."
 readme = "README.md"

@@ -27,12 +27,8 @@ def test_cylindrical_matches_bounding_box_construction() -> None:
 def test_manager_accepts_periodic_axes() -> None:
     box = fluxel.BoundingBox((0.0, 0.0, 0.0), (1.0, 1.0, 1.0))
     fluxel.FluxelManager(box, (2, 2, 1), 0, periodic=(True, False, True))
-    cylinder = fluxel.Cylindrical(
-        (0.0, 0.0, 0.0), 1.0, 2.0, 0.0, 1.0, 0.0, 1.0
-    )
-    fluxel.FluxelManager(
-        cylinder, (1, 4, 1), 0, periodic=(False, True, False)
-    )
+    cylinder = fluxel.Cylindrical((0.0, 0.0, 0.0), 1.0, 2.0, 0.0, 1.0, 0.0, 1.0)
+    fluxel.FluxelManager(cylinder, (1, 4, 1), 0, periodic=(False, True, False))
 
 
 def test_fluxel_module_exports_core_classes() -> None:

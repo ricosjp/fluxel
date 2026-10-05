@@ -42,8 +42,8 @@ from fluxel import BoundingBox, FluxelManager
 manager = FluxelManager(BoundingBox([0, 0, 0], [1, 1, 1]), [4, 4, 4], 0)
 session = manager.create_axis_projected_session(None, target_level=0)
 
-writable = session.mesh                         # independent writable arrays
-before = session.snapshot()                    # read-only shared snapshot
+writable = session.mesh  # independent writable arrays
+before = session.snapshot()  # read-only shared snapshot
 after = session.update_ib([0.1, 0, 0], copy=False)
 rebuilt = session.remesh(target_level=1, copy=False)
 ```
