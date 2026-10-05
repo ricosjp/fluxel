@@ -14,6 +14,8 @@ pub struct Forest {
     /// Base grid resolution: number of root trees along each axis `[Nx, Ny, Nz]`.
     pub(crate) base_res: [u32; 3],
     pub(crate) max_cells: usize,
+    /// Logical axes that wrap to the opposite side of the root grid.
+    pub(crate) periodic: [bool; 3],
 }
 
 impl Forest {
@@ -31,11 +33,49 @@ impl Forest {
         if roots > max_cells {
             return Err(ForestError::CellLimit { limit: max_cells });
         }
+        Self::with_limit_and_period(base_res, max_cells, [false; 3])
+    }
+
+    /// Create an empty forest whose selected logical axes wrap across the root grid.
+    ///
+    /// `periodic` is `[x, y, z]`. A true component identifies the two outer faces of
+    /// that axis. Root-count and cell-limit checks match [`Self::with_cell_limit`].
+    pub fn with_periodic_axes(
+        base_res: [u32; 3],
+        periodic: [bool; 3],
+    ) -> Result<Self, ForestError> {
+        Self::with_limit_and_period(base_res, usize::MAX, periodic)
+    }
+
+    /// Periodic forest with the same leaf-cell limit as [`Self::with_cell_limit`].
+    pub fn with_periodic_cell_limit(
+        base_res: [u32; 3],
+        max_cells: usize,
+        periodic: [bool; 3],
+    ) -> Result<Self, ForestError> {
+        Self::with_limit_and_period(base_res, max_cells, periodic)
+    }
+
+    fn with_limit_and_period(
+        base_res: [u32; 3],
+        max_cells: usize,
+        periodic: [bool; 3],
+    ) -> Result<Self, ForestError> {
+        let roots = validate_resolution(base_res)?;
+        if roots > max_cells {
+            return Err(ForestError::CellLimit { limit: max_cells });
+        }
         Ok(Self {
             keys: Vec::new(),
             base_res,
             max_cells,
+            periodic,
         })
+    }
+
+    /// Logical axes that wrap, in X/Y/Z order.
+    pub fn periodic_axes(&self) -> [bool; 3] {
+        self.periodic
     }
 
     /// Root-tree counts in X/Y/Z order.

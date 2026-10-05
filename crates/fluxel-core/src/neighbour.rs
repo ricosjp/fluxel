@@ -8,8 +8,8 @@ impl Forest {
     /// Maps global logical coordinates to `(tree_id, local x, y, z)` when crossing tree bounds.
     ///
     /// Each tree owns a `[0, 2^MAX_LEVEL)` logical cube; coordinates outside wrap to neighbour trees
-    /// using Euclidean division by `2^MAX_LEVEL`. Returns [`None`] if the point leaves the global
-    /// `[0, nx) × [0, ny) × [0, nz)` tree grid.
+    /// using Euclidean division by `2^MAX_LEVEL`. A periodic axis wraps past the root grid.
+    /// Returns [`None`] if the point leaves a non-periodic side of the global tree grid.
     pub fn resolve_coord(
         &self,
         tree_id: u32,
@@ -31,9 +31,13 @@ impl Forest {
         let new_y = y.rem_euclid(max_val);
         let new_z = z.rem_euclid(max_val);
 
-        if tx < 0 || tx >= nx as i64 || ty < 0 || ty >= ny as i64 || tz < 0 || tz >= nz as i64 {
+        let (Some(tx), Some(ty), Some(tz)) = (
+            place_on_axis(tx, nx as i64, self.periodic[0]),
+            place_on_axis(ty, ny as i64, self.periodic[1]),
+            place_on_axis(tz, nz as i64, self.periodic[2]),
+        ) else {
             return None;
-        }
+        };
 
         let new_tree_id = (tx + ty * (nx as i64) + tz * (nx as i64) * (ny as i64)) as u32;
         Some((new_tree_id, new_x as u32, new_y as u32, new_z as u32))
@@ -132,6 +136,16 @@ impl Forest {
     }
 }
 
+fn place_on_axis(index: i64, count: i64, periodic: bool) -> Option<i64> {
+    if periodic {
+        Some(index.rem_euclid(count))
+    } else if (0..count).contains(&index) {
+        Some(index)
+    } else {
+        None
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -154,6 +168,21 @@ mod tests {
         // Cross tree 1's X+ face → outside the domain
         let res3 = forest.resolve_coord(1, logical_max + 1, 0, 0);
         assert!(res3.is_none());
+    }
+
+    #[test]
+    fn periodic_y_axis_wraps_the_root_grid() {
+        let forest = Forest::with_periodic_axes([1, 4, 1], [false, true, false]).unwrap();
+        let logical_max = (1i64 << MAX_LEVEL) - 1;
+        assert_eq!(
+            forest.resolve_coord(0, 0, -1, 0),
+            Some((3, 0, logical_max as u32, 0))
+        );
+        assert_eq!(
+            forest.resolve_coord(3, 0, logical_max + 1, 0),
+            Some((0, 0, 0, 0))
+        );
+        assert!(forest.resolve_coord(0, -1, 0, 0).is_none());
     }
 
     #[test]
