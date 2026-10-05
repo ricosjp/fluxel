@@ -16,8 +16,8 @@ use pyo3::{exceptions::PyUserWarning, prelude::*};
 /// ----------
 /// mesh : CfdAxisProjectedMesh
 ///     Current CFD mesh snapshot (a new Python object on each access).
-/// translation : list of float
-///     Current rigid translation ``[tx, ty, tz]`` applied to the IB mesh.
+/// translation : Float3
+///     Current rigid translation ``(tx, ty, tz)`` applied to the IB mesh.
 /// rotation_quaternion : list of float
 ///     Current rigid rotation as a unit quaternion ``[w, x, y, z]``.
 #[pyclass]
@@ -85,9 +85,10 @@ impl ApibmSession {
         self.cache.export(py, self.inner.mesh())
     }
     #[getter]
-    /// Current absolute translation [tx, ty, tz] in surface length units.
-    fn translation(&self) -> [f64; 3] {
-        self.inner.pose().translation()
+    /// Current absolute translation (tx, ty, tz) in surface length units.
+    fn translation(&self) -> (f64, f64, f64) {
+        let [tx, ty, tz] = self.inner.pose().translation();
+        (tx, ty, tz)
     }
     #[getter]
     /// Current normalized absolute rotation [w, x, y, z].
@@ -104,8 +105,8 @@ impl ApibmSession {
     ///
     /// Parameters
     /// ----------
-    /// translation : list of float or None
-    ///     Absolute translation ``[tx, ty, tz]``. ``None`` keeps the current
+    /// translation : Float3 or None
+    ///     Absolute translation ``(tx, ty, tz)``. ``None`` keeps the current
     ///     translation.
     /// rotation_quaternion : list of float or None
     ///     Absolute unit quaternion ``[w, x, y, z]``. ``None`` keeps the
@@ -173,11 +174,12 @@ impl ApibmSession {
     /// target_level : int or None
     ///     Surface refinement target before final uniform leaf refinement.
     ///     ``None`` keeps the current target level.
-    /// refinement_regions : list of tuple[list[float], list[float], int] | None
-    ///     Optional region refinement requests as ``(min, max, level)``.
-    ///     ``None`` keeps the current region list.
-    /// translation : list of float or None
-    ///     Absolute translation ``[tx, ty, tz]``. ``None`` keeps the current
+    /// refinement_regions : list of tuple[Float3, Float3, int] | None
+    ///     ``(min, max, level)`` intervals. ``None`` keeps the current list.
+    ///     Cartesian intervals are world ``(x, y, z)``. Cylindrical intervals
+    ///     are ``(r, θ, z)``; a full turn may wrap ``θ`` with ``max[1] < min[1]``.
+    /// translation : Float3 or None
+    ///     Absolute translation ``(tx, ty, tz)``. ``None`` keeps the current
     ///     translation.
     /// rotation_quaternion : list of float or None
     ///     Absolute unit quaternion ``[w, x, y, z]``. ``None`` keeps the
@@ -235,10 +237,23 @@ impl ApibmSession {
         warn_outside_refinement: bool,
         copy: bool,
     ) -> PyResult<Py<CfdAxisProjectedMesh>> {
-        let request = RemeshRequest {
-            target_level,
-            regions: refinement_regions.map(arguments::regions).transpose()?,
-            pose: arguments::pose(translation, rotation_quaternion),
+        let pose = arguments::pose(translation, rotation_quaternion);
+        let request = if self.inner.is_cylindrical() {
+            RemeshRequest {
+                target_level,
+                parameter_regions: refinement_regions
+                    .map(arguments::parameter_regions)
+                    .transpose()?,
+                pose,
+                ..Default::default()
+            }
+        } else {
+            RemeshRequest {
+                target_level,
+                regions: refinement_regions.map(arguments::regions).transpose()?,
+                pose,
+                ..Default::default()
+            }
         };
         let update = py
             .detach(|| self.inner.prepare_remesh(request))

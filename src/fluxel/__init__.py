@@ -8,6 +8,7 @@ from ._fluxel import (
     BoundingBox,
     CfdAxisProjectedMesh,
     CfdGhostCellMesh,
+    Cylindrical,
     FluxelManager,
     Forest,
 )
@@ -22,6 +23,7 @@ from .enums import (
     split_axis_into_directions,
 )
 from .pose import quaternion_from_axis_angle
+from .types import Bool3, Float3, Int3
 
 
 @runtime_checkable
@@ -38,21 +40,50 @@ class ICfdMesh(Protocol):
     @property
     def coordinate_type(self) -> int:
         """
-        Coordinate code; generated meshes currently use 0 (Cartesian).
+        Coordinate code. 0 is Cartesian and 1 is cylindrical.
         """
         ...
 
     @property
     def cell_centers(self) -> np.ndarray:
         """
-        Physical centers: float64 array of shape (n_cells, 3).
+        World sample points: float64 array of shape (n_cells, 3).
+
+        Cartesian samples are box centers. Cylindrical samples are parameter
+        midpoints mapped to world, which differ from the volume centroids.
         """
         ...
 
     @property
     def cell_sizes(self) -> np.ndarray:
         """
-        Physical side lengths [dx, dy, dz]: float64 (n_cells, 3).
+        Coordinate-aligned widths: float64 (n_cells, 3).
+
+        Cartesian widths are the edge lengths. Cylindrical widths are
+        ``[Δr, r Δθ, Δz]``. Their product is not the cylindrical cell volume.
+        """
+        ...
+
+    @property
+    def cell_volumes(self) -> np.ndarray:
+        """
+        Exact cell volumes: float64 (n_cells,).
+        """
+        ...
+
+    @property
+    def cell_centroids(self) -> np.ndarray:
+        """
+        Volume centroids in world coordinates: float64 (n_cells, 3).
+        """
+        ...
+
+    @property
+    def cell_corners(self) -> np.ndarray:
+        """
+        VTK corners in world coordinates: float64 (n_cells, 8, 3).
+
+        Cylindrical edges are straight chords through the parameter corners.
         """
         ...
 
@@ -80,7 +111,38 @@ class ICfdMesh(Protocol):
     @property
     def internal_faces_axis(self) -> np.ndarray:
         """
-        Internal-face axes: uint8 (n_internal_faces,), X=0, Y=1, Z=2.
+        Logical face axes: uint8 (n_internal_faces,). Values 0, 1, 2 are
+        Cartesian X, Y, Z or cylindrical r, θ, z.
+        """
+        ...
+
+    @property
+    def internal_faces_area(self) -> np.ndarray:
+        """
+        Area vectors from owner toward neighbour: float64 (n_internal_faces, 3).
+        """
+        ...
+
+    @property
+    def internal_faces_min(self) -> np.ndarray:
+        """
+        Face minima: float64 (n_internal_faces, 3), world ``(x, y, z)`` or
+        ``(r, θ, z)``.
+        """
+        ...
+
+    @property
+    def internal_faces_max(self) -> np.ndarray:
+        """
+        Face maxima: float64 (n_internal_faces, 3), same components as the
+        minima.
+        """
+        ...
+
+    @property
+    def internal_faces_winding(self) -> np.ndarray:
+        """
+        Periodic wraps: int8 (n_internal_faces,). A full-turn θ seam is 1.
         """
         ...
 
@@ -94,8 +156,32 @@ class ICfdMesh(Protocol):
     @property
     def domain_bnd_faces_dir(self) -> np.ndarray:
         """
-        Outward directions: uint8 (n_domain_bnd_faces,), -X,+X,-Y,+Y,-Z,+Z =
-        0..5.
+        Outward logical directions: uint8 (n_domain_bnd_faces,), codes 0..5.
+
+        On a cylinder the pairs are ``-r,+r``, ``-θ,+θ``, ``-z,+z``.
+        """
+        ...
+
+    @property
+    def domain_bnd_faces_area(self) -> np.ndarray:
+        """
+        Outward area vectors of domain faces: float64 (n_domain_bnd_faces, 3).
+        """
+        ...
+
+    @property
+    def domain_bnd_faces_min(self) -> np.ndarray:
+        """
+        Domain-face minima: float64 (n_domain_bnd_faces, 3). Components match
+        the internal-face minima.
+        """
+        ...
+
+    @property
+    def domain_bnd_faces_max(self) -> np.ndarray:
+        """
+        Domain-face maxima: float64 (n_domain_bnd_faces, 3). Components match
+        the internal-face minima.
         """
         ...
 
@@ -104,12 +190,16 @@ __all__ = [
     "ApibmSession",
     "ApIbmFaceData",
     "Axis",
+    "Bool3",
     "BoundingBox",
     "CfdAxisProjectedMesh",
     "CfdGhostCellMesh",
     "CoordinateType",
+    "Cylindrical",
     "Direction",
+    "Float3",
     "FluxelManager",
+    "Int3",
     "Forest",
     "ICfdMesh",
     "get_axis_from_direction",

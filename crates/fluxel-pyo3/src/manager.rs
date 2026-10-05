@@ -2,7 +2,7 @@
 use crate::{
     apibm_session::ApibmSession,
     arguments::{self, RegionInput},
-    cfd_mesh::{BoundingBox, CfdAxisProjectedMesh, CfdGhostCellMesh},
+    cfd_mesh::{BoundingBox, CfdAxisProjectedMesh, CfdGhostCellMesh, Cylindrical},
     errors::to_python,
 };
 use fluxel_engine::{self as engine, BuildLimits, MeshBuildConfig};
@@ -14,10 +14,11 @@ use std::path::Path;
 ///
 /// Parameters
 /// ----------
-/// bbox : BoundingBox
-///     The physical bounds of the overall domain.
-/// base_res : list of int
-///     The initial number of root blocks (trees) in [X, Y, Z] directions.
+/// domain : BoundingBox or Cylindrical
+///     Physical domain. A box uses world ``(x, y, z)``. A cylinder uses
+///     ``(r, θ, z)``.
+/// base_res : Int3
+///     Root counts along the domain axes.
 /// n_leaf_refinement : int (default: 3)
 ///     The number of times that
 ///     the uniform refinement is applied to the final mesh.
@@ -27,6 +28,10 @@ use std::path::Path;
 ///     and final uniform refinement. Exceeding it raises ValueError.
 ///     Also applies to sessions and subsequent remeshing. None adds no
 ///     user-specified limit. This is not a target cell count or memory cap.
+/// periodic : Bool3 or None (default: None)
+///     Axes that wrap across the root grid. Cartesian order is ``(x, y, z)``.
+///     Cylindrical order is ``(r, θ, z)``. ``None`` wraps none on a box and
+///     wraps only θ on a full-turn cylinder.
 ///
 /// Raises
 /// ------
@@ -40,7 +45,9 @@ use std::path::Path;
 /// Notes
 /// -----
 /// No surface or cell mesh is created until a build/session method is called.
-/// Lengths use the same units as the surface coordinates.
+/// Lengths use the same units as the surface coordinates. A cylinder uses
+/// parameter refinement ``(r, θ, z)``. A full turn may wrap θ with
+/// ``max[1] < min[1]``. World-box refinement on a cylinder is rejected.
 #[pyclass]
 pub struct FluxelManager {
     config: MeshBuildConfig,
@@ -48,15 +55,18 @@ pub struct FluxelManager {
 #[pymethods]
 impl FluxelManager {
     #[new]
-    #[pyo3(signature = (bbox, base_res, n_leaf_refinement = 3, *, max_cells = None))]
+    #[pyo3(signature = (
+        domain, base_res, n_leaf_refinement = 3, *, max_cells = None, periodic = None
+    ))]
     /// Initialize the FluxelManager.
     ///
     /// Parameters
     /// ----------
-    /// bbox : BoundingBox
-    ///     The physical bounds of the overall domain.
-    /// base_res : list of int
-    ///     The initial number of root blocks (trees) in [X, Y, Z] directions.
+    /// domain : BoundingBox or Cylindrical
+    ///     Physical domain. A box uses world ``(x, y, z)``. A cylinder uses
+    ///     ``(r, θ, z)``.
+    /// base_res : Int3
+    ///     Root counts along the domain axes.
     /// n_leaf_refinement : int (default: 3)
     ///     The number of times that
     ///     the uniform refinement is applied to the final mesh.
@@ -66,47 +76,76 @@ impl FluxelManager {
     ///     and final uniform refinement. Exceeding it raises ValueError.
     ///     Also applies to sessions and subsequent remeshing. None adds no
     ///     user-specified limit. This is not a target cell count or memory cap.
+    /// periodic : Bool3 or None (default: None)
+    ///     Axes that wrap across the root grid. Cartesian order is ``(x, y, z)``.
+    ///     Cylindrical order is ``(r, θ, z)``. ``None`` wraps none on a box and
+    ///     wraps only θ on a full-turn cylinder.
     ///
     /// Raises
     /// ------
     /// ValueError
-    ///     If bounds or root resolution are invalid, the root count exceeds
-    ///     max_cells, or n_leaf_refinement exceeds 32. Each resolution component
-    ///     must be positive and the product must not exceed 2**26.
+    ///     If the domain, root resolution, or refinement limits are invalid.
     /// TypeError, OverflowError
     ///     If an argument cannot be converted to the required native type.
     ///
     /// Notes
     /// -----
     /// No surface or cell mesh is created until a build/session method is called.
-    /// Lengths use the same units as the surface coordinates.
+    /// Lengths use the same units as the surface coordinates. A cylinder uses
+    /// parameter refinement ``(r, θ, z)``. A full turn may wrap θ with
+    /// ``max[1] < min[1]``. World-box refinement on a cylinder is rejected.
     pub fn new(
-        bbox: &BoundingBox,
+        domain: &Bound<'_, PyAny>,
         base_res: [u32; 3],
         n_leaf_refinement: u8,
         max_cells: Option<usize>,
+        periodic: Option<[bool; 3]>,
     ) -> PyResult<Self> {
-        let bounds = fluxel_geometry::BoundingBox::new(bbox.min, bbox.max)
-            .map_err(|e| to_python(e.into()))?;
-        Ok(Self {
-            config: MeshBuildConfig::new(
+        let limits = BuildLimits {
+            max_cells: max_cells.unwrap_or(usize::MAX),
+        };
+        let config = if let Ok(bbox) = domain.extract::<PyRef<BoundingBox>>() {
+            let bounds = fluxel_geometry::BoundingBox::new(bbox.min, bbox.max)
+                .map_err(|error| to_python(error.into()))?;
+            MeshBuildConfig::new(
                 bounds,
                 base_res,
                 n_leaf_refinement,
-                BuildLimits {
-                    max_cells: max_cells.unwrap_or(usize::MAX),
-                },
+                limits,
+                periodic.unwrap_or([false; 3]),
             )
-            .map_err(to_python)?,
+        } else if let Ok(cylinder) = domain.extract::<PyRef<Cylindrical>>() {
+            let geometry = cylinder.geometry();
+            let axes = periodic.unwrap_or([false, geometry.is_full_turn(), false]);
+            MeshBuildConfig::cylindrical(
+                geometry.origin(),
+                geometry.r_min(),
+                geometry.r_max(),
+                geometry.theta_start(),
+                geometry.theta_extent(),
+                geometry.z_min(),
+                geometry.z_max(),
+                base_res,
+                n_leaf_refinement,
+                limits,
+                axes,
+            )
+        } else {
+            return Err(pyo3::exceptions::PyTypeError::new_err(
+                "domain must be a BoundingBox or a Cylindrical",
+            ));
+        };
+        Ok(Self {
+            config: config.map_err(to_python)?,
         })
     }
     #[pyo3(signature = (mesh_path, target_level, fluid_seed_point, refinement_regions = None))]
     /// Builds a CFD mesh
     /// tailored for the Ghost-Cell Immersed Boundary Method (GCIBM).
     ///
-    /// This method reads an STL / OBJ file, refines the octree cells near the surface
-    /// up to the `target_level`, performs inside/outside determination,
-    /// and calculates GCIBM data such as image points or extrapolation weights.
+    /// This method reads an STL / OBJ file, refines cells near the surface up to
+    /// `target_level`, classifies inside and outside, and stores image points
+    /// and extrapolation weights.
     ///
     /// Parameters
     /// ----------
@@ -115,12 +154,12 @@ impl FluxelManager {
     ///     Specifying None will generate a mesh without immersed boundary.
     /// target_level : int
     ///     Surface refinement target before final uniform leaf refinement.
-    /// fluid_seed_point : list of float
+    /// fluid_seed_point : Float3
     ///     The point in the physical domain to seed the fluid region.
-    /// refinement_regions : list of tuple[list[float], list[float], int] | None
-    ///     Optional region refinement requests as ``(min, max, level)``.
-    ///     Cells whose AABB intersects a region are refined up to ``level``
-    ///     before 2:1 balancing and final uniform leaf refinement.
+    /// refinement_regions : list of tuple[Float3, Float3, int] | None
+    ///     ``(min, max, level)`` intervals refined before balancing.
+    ///     Cartesian intervals are world ``(x, y, z)``. Cylindrical intervals
+    ///     are ``(r, θ, z)``; a full turn may wrap ``θ`` with ``max[1] < min[1]``.
     ///
     /// Returns
     /// -------
@@ -144,8 +183,8 @@ impl FluxelManager {
     /// target_level and region levels are targets before final uniform refinement,
     /// not upper bounds on final cell levels. Each must be in [0, 32], and the
     /// largest requested level plus n_leaf_refinement must not exceed 32.
-    /// Regions use finite, strictly ordered corners; only positive-volume overlap
-    /// counts. None and [] both mean no region requests for a new build.
+    /// Regions need finite corners and positive overlap. On a cylinder, ``r`` and
+    /// ``z`` stay ordered and ``θ`` may wrap. None and [] request no regions.
     /// max_cells also applies to balancing and final uniform refinement.
     /// The surface starts at its file coordinates with no rotation or translation.
     ///
@@ -169,7 +208,11 @@ impl FluxelManager {
         fluid_seed_point: [f64; 3],
         refinement_regions: Option<Vec<RegionInput>>,
     ) -> PyResult<CfdGhostCellMesh> {
-        let plan = arguments::plan(target_level, refinement_regions)?;
+        let plan = arguments::plan(
+            target_level,
+            refinement_regions,
+            self.config.is_cylindrical(),
+        )?;
         let output = py
             .detach(|| {
                 let boundary = engine::io::load_boundary(mesh_path.map(Path::new))?;
@@ -182,11 +225,8 @@ impl FluxelManager {
     /// Builds a CFD mesh
     /// tailored for the Axis-Projected Immersed Boundary Method (APIBM).
     ///
-    /// This method reads an STL / OBJ file, refines the octree cells near the surface
-    /// up to the `target_level`, performs axis raytracing, and calculates
-    /// APIBM data such as physical distances to the immersed boundary along
-    /// each axis and cell-center Dirichlet-constraint candidates. These are
-    /// available in the returned mesh's ``ap`` payload.
+    /// This method reads an STL / OBJ file, refines cells near the surface up to
+    /// `target_level`, and stores the axis-projected hit paths on ``ap``.
     ///
     /// Parameters
     /// ----------
@@ -195,10 +235,10 @@ impl FluxelManager {
     ///     Specifying None will generate a mesh without immersed boundary.
     /// target_level : int
     ///     Surface refinement target before final uniform leaf refinement.
-    /// refinement_regions : list of tuple[list[float], list[float], int] | None
-    ///     Optional region refinement requests as ``(min, max, level)``.
-    ///     Cells whose AABB intersects a region are refined up to ``level``
-    ///     before 2:1 balancing and final uniform leaf refinement.
+    /// refinement_regions : list of tuple[Float3, Float3, int] | None
+    ///     ``(min, max, level)`` intervals refined before balancing.
+    ///     Cartesian intervals are world ``(x, y, z)``. Cylindrical intervals
+    ///     are ``(r, θ, z)``; a full turn may wrap ``θ`` with ``max[1] < min[1]``.
     ///
     /// Returns
     /// -------
@@ -210,8 +250,8 @@ impl FluxelManager {
     /// target_level and region levels are targets before final uniform refinement,
     /// not upper bounds on final cell levels. Each must be in [0, 32], and the
     /// largest requested level plus n_leaf_refinement must not exceed 32.
-    /// Regions use finite, strictly ordered corners; only positive-volume overlap
-    /// counts. None and [] both mean no region requests for a new build.
+    /// Regions need finite corners and positive overlap. On a cylinder, ``r`` and
+    /// ``z`` stay ordered and ``θ`` may wrap. None and [] request no regions.
     /// max_cells also applies to balancing and final uniform refinement.
     /// The surface starts at its file coordinates with no rotation or translation.
     ///
@@ -241,7 +281,11 @@ impl FluxelManager {
         target_level: u8,
         refinement_regions: Option<Vec<RegionInput>>,
     ) -> PyResult<CfdAxisProjectedMesh> {
-        let plan = arguments::plan(target_level, refinement_regions)?;
+        let plan = arguments::plan(
+            target_level,
+            refinement_regions,
+            self.config.is_cylindrical(),
+        )?;
         let output = py
             .detach(|| {
                 let boundary = engine::io::load_boundary(mesh_path.map(Path::new))?;
@@ -261,10 +305,10 @@ impl FluxelManager {
     ///     Specifying None will generate a mesh without immersed boundary.
     /// target_level : int
     ///     Surface refinement target before final uniform leaf refinement.
-    /// refinement_regions : list of tuple[list[float], list[float], int] | None
-    ///     Optional region refinement requests as ``(min, max, level)``.
-    ///     Cells whose AABB intersects a region are refined up to ``level``
-    ///     before 2:1 balancing and final uniform leaf refinement.
+    /// refinement_regions : list of tuple[Float3, Float3, int] | None
+    ///     ``(min, max, level)`` intervals refined before balancing.
+    ///     Cartesian intervals are world ``(x, y, z)``. Cylindrical intervals
+    ///     are ``(r, θ, z)``; a full turn may wrap ``θ`` with ``max[1] < min[1]``.
     ///
     /// Returns
     /// -------
@@ -276,8 +320,8 @@ impl FluxelManager {
     /// target_level and region levels are targets before final uniform refinement,
     /// not upper bounds on final cell levels. Each must be in [0, 32], and the
     /// largest requested level plus n_leaf_refinement must not exceed 32.
-    /// Regions use finite, strictly ordered corners; only positive-volume overlap
-    /// counts. None and [] both mean no region requests for a new build.
+    /// Regions need finite corners and positive overlap. On a cylinder, ``r`` and
+    /// ``z`` stay ordered and ``θ`` may wrap. None and [] request no regions.
     /// max_cells also applies to balancing and final uniform refinement.
     /// The surface starts at its file coordinates with no rotation or translation.
     ///
@@ -301,7 +345,11 @@ impl FluxelManager {
         target_level: u8,
         refinement_regions: Option<Vec<RegionInput>>,
     ) -> PyResult<ApibmSession> {
-        let plan = arguments::plan(target_level, refinement_regions)?;
+        let plan = arguments::plan(
+            target_level,
+            refinement_regions,
+            self.config.is_cylindrical(),
+        )?;
         let inner = py
             .detach(|| {
                 let boundary = engine::io::load_boundary(mesh_path.map(Path::new))?;

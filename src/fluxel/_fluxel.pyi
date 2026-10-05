@@ -9,11 +9,11 @@ from typing import Protocol, runtime_checkable
 
 import numpy as np
 
-RefinementRegion = tuple[list[float], list[float], int]
+from fluxel.types import Bool3, Float3, Int3
 
-def _quaternion_from_axis_angle(
-    axis: list[float], angle: float
-) -> list[float]: ...
+RefinementRegion = tuple[Float3, Float3, int]
+
+def _quaternion_from_axis_angle(axis: Float3, angle: float) -> list[float]: ...
 
 class BoundingBox:
     """
@@ -21,7 +21,7 @@ class BoundingBox:
 
     Parameters
     ----------
-    min, max : list of float
+    min, max : Float3
         Three finite coordinates with min < max on every axis and finite
         extents.
 
@@ -36,12 +36,64 @@ class BoundingBox:
     Point location includes the minimum faces and excludes the maximum faces.
     """
 
-    min: list[float]
-    max: list[float]
+    min: Float3
+    max: Float3
 
-    def __init__(self, min: list[float], max: list[float]) -> None:
+    def __init__(self, min: Float3, max: Float3) -> None:
         """
         Validate finite, strictly ordered 3D bounds; see BoundingBox.
+        """
+        ...
+
+class Cylindrical:
+    """
+    Annular sector or full turn about an axis parallel to world Z.
+
+    Parameters
+    ----------
+    origin : Float3
+        World point where ``r = 0`` and ``z = 0``.
+    r_min, r_max : float
+        Inner and outer radii. ``r_min`` must be positive.
+    theta_start, theta_extent : float
+        Start angle and angular width in radians. One turn selects a
+        periodic full turn.
+    z_min, z_max : float
+        Axial limits in the same length units as the radii.
+
+    Raises
+    ------
+    ValueError
+        If a value is nonfinite, the radius includes the axis, the angle
+        is outside ``(0, 2π]``, or the axial interval is empty.
+
+    Notes
+    -----
+    Properties are read-only copies. ``r`` and ``z`` include the lower
+    face and exclude the upper face. ``θ`` is
+    ``[theta_start, theta_start + extent)``. ``r = 0`` is not supported.
+    """
+
+    origin: Float3
+    r_min: float
+    r_max: float
+    theta_start: float
+    theta_extent: float
+    z_min: float
+    z_max: float
+
+    def __init__(
+        self,
+        origin: Float3,
+        r_min: float,
+        r_max: float,
+        theta_start: float,
+        theta_extent: float,
+        z_min: float,
+        z_max: float,
+    ) -> None:
+        """
+        Validate an annular sector or full turn; see Cylindrical.
         """
         ...
 
@@ -60,19 +112,46 @@ class ICfdMesh(Protocol):
     @property
     def coordinate_type(self) -> int:
         """
-        Coordinate code; generated meshes currently use 0 (Cartesian).
+        Coordinate code: 0 is Cartesian and 1 is cylindrical.
         """
         ...
     @property
     def cell_centers(self) -> np.ndarray:
         """
-        Physical centers: float64 array of shape (n_cells, 3).
+        World sample points: float64 (n_cells, 3).
+
+        Cartesian samples are box centers. Cylindrical samples are
+        parameter midpoints mapped to world and differ from volume centroids.
         """
         ...
     @property
     def cell_sizes(self) -> np.ndarray:
         """
-        Physical side lengths [dx, dy, dz]: float64 (n_cells, 3).
+        Coordinate-aligned widths: float64 (n_cells, 3).
+
+        Cartesian widths are edge lengths. Cylindrical widths are
+        ``[Δr, r Δθ, Δz]``. Their product is not the cell volume.
+        """
+        ...
+    @property
+    def cell_volumes(self) -> np.ndarray:
+        """
+        Exact cell volumes: float64 (n_cells,).
+        """
+        ...
+    @property
+    def cell_centroids(self) -> np.ndarray:
+        """
+        Volume centroids in world coordinates: float64 (n_cells, 3).
+        """
+        ...
+    @property
+    def cell_corners(self) -> np.ndarray:
+        """
+        VTK corners in world coordinates: float64 (n_cells, 8, 3).
+
+        Cylindrical edges are straight chords through the parameter
+        corners.
         """
         ...
     @property
@@ -96,7 +175,8 @@ class ICfdMesh(Protocol):
     @property
     def internal_faces_axis(self) -> np.ndarray:
         """
-        Internal-face axes: uint8 (n_internal_faces,), X=0, Y=1, Z=2.
+        Logical face axes: uint8 (n_internal_faces,). Values 0, 1, 2 are
+        Cartesian X, Y, Z or cylindrical r, θ, z.
         """
         ...
     @property
@@ -106,89 +186,77 @@ class ICfdMesh(Protocol):
         """
         ...
     @property
+    def internal_faces_area(self) -> np.ndarray:
+        """
+        Area vectors from owner toward neighbour: float64 (n_internal_faces, 3).
+        """
+        ...
+    @property
+    def internal_faces_min(self) -> np.ndarray:
+        """
+        Face minima: float64 (n_internal_faces, 3), world ``(x, y, z)`` or
+        ``(r, θ, z)``.
+        """
+        ...
+    @property
+    def internal_faces_max(self) -> np.ndarray:
+        """
+        Face maxima: float64 (n_internal_faces, 3), same components as the
+        minima.
+        """
+        ...
+    @property
+    def internal_faces_winding(self) -> np.ndarray:
+        """
+        Periodic wraps: int8 (n_internal_faces,). A full-turn θ seam is 1.
+        """
+        ...
+    @property
     def domain_bnd_faces_dir(self) -> np.ndarray:
         """
-        Outward directions: uint8 (n_domain_bnd_faces,), -X,+X,-Y,+Y,-Z,+Z =
-        0..5.
+        Outward logical directions: uint8 (n_domain_bnd_faces,), codes 0..5.
+
+        On a cylinder the pairs are ``-r,+r``, ``-θ,+θ``, ``-z,+z``.
+        """
+        ...
+    @property
+    def domain_bnd_faces_area(self) -> np.ndarray:
+        """
+        Outward area vectors of domain faces: float64 (n_domain_bnd_faces, 3).
+        """
+        ...
+    @property
+    def domain_bnd_faces_min(self) -> np.ndarray:
+        """
+        Domain-face minima: float64 (n_domain_bnd_faces, 3). Components
+        match the internal-face minima.
+        """
+        ...
+    @property
+    def domain_bnd_faces_max(self) -> np.ndarray:
+        """
+        Domain-face maxima: float64 (n_domain_bnd_faces, 3). Components
+        match the internal-face minima.
         """
         ...
 
 class CfdGhostCellMesh(ICfdMesh):
     """
-    Structure of Arrays (SoA) mesh representation for CFD solvers
-    using the Ghost-Cell Immersed Boundary Method (GCIBM).
-    Arrays use NumPy storage with explicit ownership.
-    Default snapshots are writable.
+    SoA mesh for the ghost-cell immersed-boundary method.
+    Arrays use NumPy storage. One-shot builds are writable.
 
-    Attributes
-    ----------
-    n_cells : int
-        The number of cells in the mesh.
-    coordinate_type : int
-        The type of coordinate system used in the mesh.
-        0: Cartesian
-    cell_centers : numpy.ndarray
-        Array of shape (N_cells, 3) dtype=float64
-        the physical center coordinates of each background cell.
-    cell_sizes : numpy.ndarray
-        Array of shape (N_cells, 3) dtype=float64
-        the cell side lengths [dx, dy, dz] for each background cell.
-    patch_name_to_id : dict[str, int]
-        A dictionary mapping patch names to their corresponding IDs.
-
-    internal_faces_owner : numpy.ndarray
-        Array of shape (N_internal_faces,) dtype=uintp
-        the owner cell index for internal faces.
-    internal_faces_neighbour : numpy.ndarray
-        Array of shape (N_internal_faces,) dtype=uintp
-        the neighbour cell index for internal faces.
-    internal_faces_axis : numpy.ndarray
-        Array of shape (N_internal_faces,) dtype=uint8
-        the axis of the internal faces.
-        0: X, 1: Y, 2: Z
-    domain_bnd_faces_owner : numpy.ndarray
-        Array of shape (N_domain_bnd_faces,) dtype=uintp
-        the owner cell index for domain boundary faces.
-    domain_bnd_faces_dir : numpy.ndarray
-        Array of shape (N_domain_bnd_faces,) dtype=uint8
-        the direction of the domain boundary faces.
-        0: -X, 1: +X, 2: -Y, 3: +Y, 4: -Z, 5: +Z
-
-    [Ghost Cell IBM Specific Data]
-    gc_is_fluid : numpy.ndarray
-        Array of shape (N_cells,) dtype=bool
-        a boolean flag indicating whether each cell is a fluid cell.
-
-    gc_cell_ids : numpy.ndarray
-        Array of shape (N_ghosts,) dtype=uintp
-        the global indices of cells identified as ghost cells.
-    gc_bnd_anchor_ids : numpy.ndarray
-        Array of shape (N_ghosts,) dtype=uintp
-        the boundary triangle IDs associated with each ghost cell.
-    gc_bnd_patch_ids : numpy.ndarray
-        Array of shape (N_ghosts,) dtype=uintp
-        the boundary patch IDs associated with each ghost cell.
-    gc_bnd_intercepts : numpy.ndarray
-        Array of shape (N_ghosts, 3) dtype=float64
-        the nearest boundary points.
-    gc_image_points : numpy.ndarray
-        Array of shape (N_ghosts, 3) dtype=float64
-        the coordinates of the image points.
-    gc_interp_stencil_indices : numpy.ndarray
-        Array of shape (N_ghosts, 8) dtype=uintp
-        the fluid cell indices used for interpolating at the Image Points.
-    gc_interp_stencil_weights : numpy.ndarray
-        Array of shape (N_ghosts, 8) dtype=float64
-        the interpolation weights corresponding to `interp_stencil_indices`.
+    ``coordinate_type`` is 0 for Cartesian and 1 for cylindrical.
+    Logical axes 0, 1, 2 are X, Y, Z or ``r``, ``θ``, ``z``.
+    Ghost rows, except ``gc_is_fluid``, follow ``gc_cell_ids``.
 
     Notes
     -----
-    All gc_* rows except gc_is_fluid follow gc_cell_ids order. Unused stencil
-    columns have zero weight and must be ignored. Linear least-squares weights
-    can be negative. Failed linear interpolation falls back to inverse-distance
-    weights; no candidates produce a self-reference with weight 1, not a valid
-    fluid stencil. Counts for these cases are available only in the Rust report.
-    Cell indices must not be reused across separate builds or remeshing.
+    Unused stencil columns have zero weight and must be ignored. Linear
+    least-squares weights can be negative. Failed linear interpolation
+    falls back to inverse-distance weights. No candidates produce a
+    self-reference with weight 1, which is not a valid fluid stencil.
+    Those counts stay in the Rust report. Cell indices must not be reused
+    across builds or remeshing.
     """
 
     @property
@@ -200,19 +268,46 @@ class CfdGhostCellMesh(ICfdMesh):
     @property
     def coordinate_type(self) -> int:
         """
-        Coordinate code; generated meshes currently use 0 (Cartesian).
+        Coordinate code: 0 is Cartesian and 1 is cylindrical.
         """
         ...
     @property
     def cell_centers(self) -> np.ndarray:
         """
-        Physical centers: float64 array of shape (n_cells, 3).
+        World sample points: float64 (n_cells, 3).
+
+        Cartesian samples are box centers. Cylindrical samples are
+        parameter midpoints mapped to world and differ from volume centroids.
         """
         ...
     @property
     def cell_sizes(self) -> np.ndarray:
         """
-        Physical side lengths [dx, dy, dz]: float64 (n_cells, 3).
+        Coordinate-aligned widths: float64 (n_cells, 3).
+
+        Cartesian widths are edge lengths. Cylindrical widths are
+        ``[Δr, r Δθ, Δz]``. Their product is not the cell volume.
+        """
+        ...
+    @property
+    def cell_volumes(self) -> np.ndarray:
+        """
+        Exact cell volumes: float64 (n_cells,).
+        """
+        ...
+    @property
+    def cell_centroids(self) -> np.ndarray:
+        """
+        Volume centroids in world coordinates: float64 (n_cells, 3).
+        """
+        ...
+    @property
+    def cell_corners(self) -> np.ndarray:
+        """
+        VTK corners in world coordinates: float64 (n_cells, 8, 3).
+
+        Cylindrical edges are straight chords through the parameter
+        corners.
         """
         ...
     @property
@@ -236,7 +331,8 @@ class CfdGhostCellMesh(ICfdMesh):
     @property
     def internal_faces_axis(self) -> np.ndarray:
         """
-        Internal-face axes: uint8 (n_internal_faces,), X=0, Y=1, Z=2.
+        Logical face axes: uint8 (n_internal_faces,). Values 0, 1, 2 are
+        Cartesian X, Y, Z or cylindrical r, θ, z.
         """
         ...
     @property
@@ -246,10 +342,57 @@ class CfdGhostCellMesh(ICfdMesh):
         """
         ...
     @property
+    def internal_faces_area(self) -> np.ndarray:
+        """
+        Area vectors from owner toward neighbour: float64 (n_internal_faces, 3).
+        """
+        ...
+    @property
+    def internal_faces_min(self) -> np.ndarray:
+        """
+        Face minima: float64 (n_internal_faces, 3), world ``(x, y, z)`` or
+        ``(r, θ, z)``.
+        """
+        ...
+    @property
+    def internal_faces_max(self) -> np.ndarray:
+        """
+        Face maxima: float64 (n_internal_faces, 3), same components as the
+        minima.
+        """
+        ...
+    @property
+    def internal_faces_winding(self) -> np.ndarray:
+        """
+        Periodic wraps: int8 (n_internal_faces,). A full-turn θ seam is 1.
+        """
+        ...
+    @property
     def domain_bnd_faces_dir(self) -> np.ndarray:
         """
-        Outward directions: uint8 (n_domain_bnd_faces,), -X,+X,-Y,+Y,-Z,+Z =
-        0..5.
+        Outward logical directions: uint8 (n_domain_bnd_faces,), codes 0..5.
+
+        On a cylinder the pairs are ``-r,+r``, ``-θ,+θ``, ``-z,+z``.
+        """
+        ...
+    @property
+    def domain_bnd_faces_area(self) -> np.ndarray:
+        """
+        Outward area vectors of domain faces: float64 (n_domain_bnd_faces, 3).
+        """
+        ...
+    @property
+    def domain_bnd_faces_min(self) -> np.ndarray:
+        """
+        Domain-face minima: float64 (n_domain_bnd_faces, 3). Components
+        match the internal-face minima.
+        """
+        ...
+    @property
+    def domain_bnd_faces_max(self) -> np.ndarray:
+        """
+        Domain-face maxima: float64 (n_domain_bnd_faces, 3). Components
+        match the internal-face minima.
         """
         ...
     @property
@@ -305,22 +448,25 @@ class CfdGhostCellMesh(ICfdMesh):
 
 class ApIbmFaceData:
     """
-    Compressed axis-projected immersed-boundary payload for internal faces.
+    Compressed axis-projected payload for internal faces.
 
-    `is_immersed_face` has length ``N_internal_faces``. All other arrays are
-    compressed to ``N_immersed = count(is_immersed_face)`` and store data only
-    for immersed faces, in the same order as ``True`` entries in
-    `is_immersed_face`.
+    ``is_immersed_face`` has one entry per internal face. Every other array
+    follows the ``True`` entries, in that order.
 
-    Distances have shape ``(N_immersed,)`` and dtype ``float64``. They are
-    physical distances from each cell center to its first boundary hit along
-    the face axis, including zero for a boundary through the center.
-    ``owner_near_boundary`` and ``neighbour_near_boundary`` are boolean arrays
-    of the same shape. Each flags a candidate for a cell-center Dirichlet
-    constraint when ``d / delta_x <= delta_x / L``, where ``delta_x`` is that
-    side's cell width along the face axis and ``L`` is the largest extent of
-    the computational domain. These flags do not alter the distances or
-    apply boundary conditions; the solver must handle the constraints.
+    A distance is the path length from that side's sample to its first hit,
+    including zero when the boundary passes through the sample. Cartesian
+    paths follow the world axis. Cylindrical ``r`` and ``z`` follow ``e_r``
+    and ``e_z``. Cylindrical ``θ`` is the arc length ``r|Δθ|``.
+
+    ``owner_near_boundary`` and ``neighbour_near_boundary`` mark a
+    cell-center Dirichlet candidate when ``d / width <= width / L``.
+    ``width`` is that side's cell width on the face axis and ``L`` is the
+    largest domain extent. The flags do not change the distances or apply
+    a boundary condition.
+
+    Points, tangents, and normals have shape ``(N_immersed, 3)``. A tangent
+    is the unit search direction at the hit. A normal follows triangle
+    winding and is shared by both sides of that triangle.
     """
 
     @property
@@ -332,28 +478,28 @@ class ApIbmFaceData:
     @property
     def dist_owner_to_bnd(self) -> np.ndarray:
         """
-        Owner-side physical first-hit distances: float64 (n_immersed,), possibly
-        zero.
+        Owner-side path length to the first hit: float64 (n_immersed,),
+        possibly zero.
         """
         ...
     @property
     def dist_neighbour_to_bnd(self) -> np.ndarray:
         """
-        Neighbour-side physical first-hit distances: float64 (n_immersed,),
+        Neighbour-side path length to the first hit: float64 (n_immersed,),
         possibly zero.
         """
         ...
     @property
     def owner_near_boundary(self) -> np.ndarray:
         """
-        Owner constraint candidates: bool (n_immersed,), using d / dx <= dx / L.
+        Owner Dirichlet candidates: bool (n_immersed,). See the class notes.
         """
         ...
     @property
     def neighbour_near_boundary(self) -> np.ndarray:
         """
-        Neighbour constraint candidates: bool (n_immersed,), using d / dx <= dx
-        / L.
+        Neighbour Dirichlet candidates: bool (n_immersed,). See the class
+        notes.
         """
         ...
     @property
@@ -380,58 +526,60 @@ class ApIbmFaceData:
         Neighbour-side first-hit patch IDs: uintp (n_immersed,).
         """
         ...
+    @property
+    def owner_bnd_point(self) -> np.ndarray:
+        """
+        Owner-side world intersections: float64 (n_immersed, 3).
+        """
+        ...
+    @property
+    def owner_bnd_tangent(self) -> np.ndarray:
+        """
+        Owner-side unit search direction at the hit: float64 (n_immersed, 3).
+        """
+        ...
+    @property
+    def owner_bnd_normal(self) -> np.ndarray:
+        """
+        Owner-side unit triangle normal: float64 (n_immersed, 3).
+        """
+        ...
+    @property
+    def neighbour_bnd_point(self) -> np.ndarray:
+        """
+        Neighbour-side world intersections: float64 (n_immersed, 3).
+        """
+        ...
+    @property
+    def neighbour_bnd_tangent(self) -> np.ndarray:
+        """
+        Neighbour-side unit search direction at the hit: float64
+        (n_immersed, 3).
+        """
+        ...
+    @property
+    def neighbour_bnd_normal(self) -> np.ndarray:
+        """
+        Neighbour-side unit triangle normal: float64 (n_immersed, 3).
+        """
+        ...
 
 class CfdAxisProjectedMesh(ICfdMesh):
     """
-    Structure of Arrays (SoA) mesh representation for CFD solvers
-    using the Axis-Projected Immersed Boundary Method (APIBM/TFIBM).
-    Arrays use NumPy storage with explicit ownership.
-    Default snapshots are writable.
+    SoA mesh for the axis-projected immersed-boundary method.
+    Arrays use NumPy storage. Ordinary builds and ``session.mesh`` are
+    writable.
 
-    Attributes
-    ----------
-    n_cells: int
-        The number of cells in the mesh.
-    coordinate_type: int
-        The type of coordinate system used in the mesh.
-        0: Cartesian
-    cell_centers : numpy.ndarray
-        Array of shape (N_cells, 3) dtype=float64
-        the physical center coordinates of each background cell.
-    cell_sizes : numpy.ndarray
-        Array of shape (N_cells, 3) dtype=float64
-        the cell side lengths [dx, dy, dz] for each background cell.
-    patch_name_to_id: dict[str, int]
-        A dictionary mapping patch names to their corresponding IDs.
-
-    internal_faces_owner : numpy.ndarray
-        Array of shape (N_internal_faces,) dtype=uintp
-        the owner cell index for internal faces.
-    internal_faces_neighbour : numpy.ndarray
-        Array of shape (N_internal_faces,) dtype=uintp
-        the neighbour cell index for internal faces.
-    internal_faces_axis : numpy.ndarray
-        Array of shape (N_internal_faces,) dtype=uint8
-        the axis of the internal faces.
-        0: X, 1: Y, 2: Z
-    domain_bnd_faces_owner : numpy.ndarray
-        Array of shape (N_domain_bnd_faces,) dtype=uintp
-        the owner cell index for domain boundary faces.
-    domain_bnd_faces_dir : numpy.ndarray
-        Array of shape (N_domain_bnd_faces,) dtype=uint8
-        the direction of the domain boundary faces.
-        0: -X, 1: +X, 2: -Y, 3: +Y, 4: -Z, 5: +Z
-    ap : ApIbmFaceData
-        Axis-projected immersed-boundary face payload.
+    ``coordinate_type`` is 0 for Cartesian and 1 for cylindrical.
+    Logical axes 0, 1, 2 are X, Y, Z or ``r``, ``θ``, ``z``.
 
     Notes
     -----
     Index arrays refer to this background mesh. Indices stay stable for
-    fixed-grid
-    session updates but must not be reused after remeshing. Session.snapshot()
-    and updates with copy=False publish read-only arrays; ordinary builds and
-    session.mesh return independent writable copies. Editing copies does not
-    alter Rust state. Surface patch IDs do not label domain boundary faces.
+    fixed-grid session updates but must not be reused after remeshing.
+    ``snapshot()`` and updates with ``copy=False`` publish read-only
+    arrays. Editing copies does not alter Rust state. Surface patch IDs
+    do not label domain boundary faces.
     """
 
     @property
@@ -443,19 +591,46 @@ class CfdAxisProjectedMesh(ICfdMesh):
     @property
     def coordinate_type(self) -> int:
         """
-        Coordinate code; generated meshes currently use 0 (Cartesian).
+        Coordinate code: 0 is Cartesian and 1 is cylindrical.
         """
         ...
     @property
     def cell_centers(self) -> np.ndarray:
         """
-        Physical centers: float64 array of shape (n_cells, 3).
+        World sample points: float64 (n_cells, 3).
+
+        Cartesian samples are box centers. Cylindrical samples are
+        parameter midpoints mapped to world and differ from volume centroids.
         """
         ...
     @property
     def cell_sizes(self) -> np.ndarray:
         """
-        Physical side lengths [dx, dy, dz]: float64 (n_cells, 3).
+        Coordinate-aligned widths: float64 (n_cells, 3).
+
+        Cartesian widths are edge lengths. Cylindrical widths are
+        ``[Δr, r Δθ, Δz]``. Their product is not the cell volume.
+        """
+        ...
+    @property
+    def cell_volumes(self) -> np.ndarray:
+        """
+        Exact cell volumes: float64 (n_cells,).
+        """
+        ...
+    @property
+    def cell_centroids(self) -> np.ndarray:
+        """
+        Volume centroids in world coordinates: float64 (n_cells, 3).
+        """
+        ...
+    @property
+    def cell_corners(self) -> np.ndarray:
+        """
+        VTK corners in world coordinates: float64 (n_cells, 8, 3).
+
+        Cylindrical edges are straight chords through the parameter
+        corners.
         """
         ...
     @property
@@ -479,7 +654,8 @@ class CfdAxisProjectedMesh(ICfdMesh):
     @property
     def internal_faces_axis(self) -> np.ndarray:
         """
-        Internal-face axes: uint8 (n_internal_faces,), X=0, Y=1, Z=2.
+        Logical face axes: uint8 (n_internal_faces,). Values 0, 1, 2 are
+        Cartesian X, Y, Z or cylindrical r, θ, z.
         """
         ...
     @property
@@ -489,10 +665,57 @@ class CfdAxisProjectedMesh(ICfdMesh):
         """
         ...
     @property
+    def internal_faces_area(self) -> np.ndarray:
+        """
+        Area vectors from owner toward neighbour: float64 (n_internal_faces, 3).
+        """
+        ...
+    @property
+    def internal_faces_min(self) -> np.ndarray:
+        """
+        Face minima: float64 (n_internal_faces, 3), world ``(x, y, z)`` or
+        ``(r, θ, z)``.
+        """
+        ...
+    @property
+    def internal_faces_max(self) -> np.ndarray:
+        """
+        Face maxima: float64 (n_internal_faces, 3), same components as the
+        minima.
+        """
+        ...
+    @property
+    def internal_faces_winding(self) -> np.ndarray:
+        """
+        Periodic wraps: int8 (n_internal_faces,). A full-turn θ seam is 1.
+        """
+        ...
+    @property
     def domain_bnd_faces_dir(self) -> np.ndarray:
         """
-        Outward directions: uint8 (n_domain_bnd_faces,), -X,+X,-Y,+Y,-Z,+Z =
-        0..5.
+        Outward logical directions: uint8 (n_domain_bnd_faces,), codes 0..5.
+
+        On a cylinder the pairs are ``-r,+r``, ``-θ,+θ``, ``-z,+z``.
+        """
+        ...
+    @property
+    def domain_bnd_faces_area(self) -> np.ndarray:
+        """
+        Outward area vectors of domain faces: float64 (n_domain_bnd_faces, 3).
+        """
+        ...
+    @property
+    def domain_bnd_faces_min(self) -> np.ndarray:
+        """
+        Domain-face minima: float64 (n_domain_bnd_faces, 3). Components
+        match the internal-face minima.
+        """
+        ...
+    @property
+    def domain_bnd_faces_max(self) -> np.ndarray:
+        """
+        Domain-face maxima: float64 (n_domain_bnd_faces, 3). Components
+        match the internal-face minima.
         """
         ...
     @property
@@ -509,21 +732,23 @@ class FluxelManager:
     """
     def __init__(
         self,
-        bbox: BoundingBox,
-        base_res: list[int],
+        domain: BoundingBox | Cylindrical,
+        base_res: Int3,
         n_leaf_refinement: int = 3,
         *,
         max_cells: int | None = None,
+        periodic: Bool3 | None = None,
     ) -> None:
         """
         Initialize the FluxelManager.
 
         Parameters
         ----------
-        bbox : BoundingBox
-            The physical bounds of the overall domain.
-        base_res : list of int
-            The initial number of root blocks (trees) in [X, Y, Z] directions.
+        domain : BoundingBox or Cylindrical
+            Physical domain. A box uses world ``(x, y, z)``. A cylinder
+            uses ``(r, θ, z)``.
+        base_res : Int3
+            Root counts along the domain axes.
         n_leaf_refinement : int (default: 3)
             The number of times that
             the uniform refinement is applied to the final mesh.
@@ -533,22 +758,25 @@ class FluxelManager:
             and final uniform refinement. Exceeding it raises ValueError.
             Also applies to sessions and subsequent remeshing. None adds no
             user-specified limit. This is not a target cell count or memory cap.
+        periodic : Bool3 or None (default: None)
+            Axes that wrap across the root grid. Cartesian order is
+            ``(x, y, z)``. Cylindrical order is ``(r, θ, z)``. ``None``
+            wraps none on a box and wraps only θ on a full-turn cylinder.
 
         Raises
         ------
         ValueError
-            If bounds or root resolution are invalid, the root count exceeds
-            max_cells, or n_leaf_refinement exceeds 32. Each resolution
-            component
-            must be positive and the product must not exceed 2**26.
+            If the domain, root resolution, or refinement limits are invalid.
         TypeError, OverflowError
             If an argument cannot be converted to the required native type.
 
         Notes
         -----
         No surface or cell mesh is created until a build/session method is
-        called.
-        Lengths use the same units as the surface coordinates.
+        called. Lengths use the same units as the surface coordinates. A
+        cylinder uses parameter refinement ``(r, θ, z)``. A full turn may
+        wrap θ with ``max[1] < min[1]``. World-box refinement on a cylinder
+        is rejected.
         """
         ...
 
@@ -556,17 +784,16 @@ class FluxelManager:
         self,
         mesh_path: str | None,
         target_level: int,
-        fluid_seed_point: list[float],
+        fluid_seed_point: Float3,
         refinement_regions: list[RefinementRegion] | None = None,
     ) -> CfdGhostCellMesh:
         """
         Builds a CFD mesh
         tailored for the Ghost-Cell Immersed Boundary Method (GCIBM).
 
-        This method reads an STL / OBJ file, refines the octree cells near the
-        surface
-        up to the `target_level`, performs inside/outside determination,
-        and calculates GCIBM data such as image points or extrapolation weights.
+        This method reads an STL / OBJ file, refines cells near the surface
+        up to `target_level`, classifies inside and outside, and stores
+        image points and extrapolation weights.
 
         Parameters
         ----------
@@ -575,12 +802,13 @@ class FluxelManager:
             Specifying None will generate a mesh without immersed boundary.
         target_level : int
             Surface refinement target before final uniform leaf refinement.
-        fluid_seed_point : list of float
+        fluid_seed_point : Float3
             The point in the physical domain to seed the fluid region.
-        refinement_regions : list of tuple[list[float], list[float], int] | None
-            Optional region refinement requests as ``(min, max, level)``.
-            Cells whose AABB intersects a region are refined up to ``level``
-            before 2:1 balancing and final uniform leaf refinement.
+        refinement_regions : list of tuple[Float3, Float3, int] | None
+            ``(min, max, level)`` intervals refined before balancing.
+            Cartesian intervals are world ``(x, y, z)``. Cylindrical
+            intervals are ``(r, θ, z)``; a full turn may wrap ``θ`` with
+            ``max[1] < min[1]``.
 
         Returns
         -------
@@ -606,9 +834,9 @@ class FluxelManager:
         refinement,
         not upper bounds on final cell levels. Each must be in [0, 32], and the
         largest requested level plus n_leaf_refinement must not exceed 32.
-        Regions use finite, strictly ordered corners; only positive-volume
-        overlap
-        counts. None and [] both mean no region requests for a new build.
+        Regions need finite corners and positive overlap. On a cylinder,
+        ``r`` and ``z`` stay ordered and ``θ`` may wrap. None and []
+        request no regions.
         max_cells also applies to balancing and final uniform refinement.
         The surface starts at its file coordinates with no rotation or
         translation.
@@ -639,12 +867,9 @@ class FluxelManager:
         Builds a CFD mesh
         tailored for the Axis-Projected Immersed Boundary Method (APIBM).
 
-        This method reads an STL / OBJ file, refines the octree cells near the
-        surface
-        up to the `target_level`, performs axis raytracing, and calculates
-        APIBM data such as physical distances to the immersed boundary along
-        each axis and cell-center Dirichlet-constraint candidates. These are
-        available in the returned mesh's ``ap`` payload.
+        This method reads an STL / OBJ file, refines cells near the surface
+        up to `target_level`, and stores the axis-projected hit paths on
+        ``ap``.
 
         Parameters
         ----------
@@ -653,10 +878,11 @@ class FluxelManager:
             Specifying None will generate a mesh without immersed boundary.
         target_level : int
             Surface refinement target before final uniform leaf refinement.
-        refinement_regions : list of tuple[list[float], list[float], int] | None
-            Optional region refinement requests as ``(min, max, level)``.
-            Cells whose AABB intersects a region are refined up to ``level``
-            before 2:1 balancing and final uniform leaf refinement.
+        refinement_regions : list of tuple[Float3, Float3, int] | None
+            ``(min, max, level)`` intervals refined before balancing.
+            Cartesian intervals are world ``(x, y, z)``. Cylindrical
+            intervals are ``(r, θ, z)``; a full turn may wrap ``θ`` with
+            ``max[1] < min[1]``.
 
         Returns
         -------
@@ -669,9 +895,9 @@ class FluxelManager:
         refinement,
         not upper bounds on final cell levels. Each must be in [0, 32], and the
         largest requested level plus n_leaf_refinement must not exceed 32.
-        Regions use finite, strictly ordered corners; only positive-volume
-        overlap
-        counts. None and [] both mean no region requests for a new build.
+        Regions need finite corners and positive overlap. On a cylinder,
+        ``r`` and ``z`` stay ordered and ``θ`` may wrap. None and []
+        request no regions.
         max_cells also applies to balancing and final uniform refinement.
         The surface starts at its file coordinates with no rotation or
         translation.
@@ -718,10 +944,11 @@ class FluxelManager:
             Specifying None will generate a mesh without immersed boundary.
         target_level : int
             Surface refinement target before final uniform leaf refinement.
-        refinement_regions : list of tuple[list[float], list[float], int] | None
-            Optional region refinement requests as ``(min, max, level)``.
-            Cells whose AABB intersects a region are refined up to ``level``
-            before 2:1 balancing and final uniform leaf refinement.
+        refinement_regions : list of tuple[Float3, Float3, int] | None
+            ``(min, max, level)`` intervals refined before balancing.
+            Cartesian intervals are world ``(x, y, z)``. Cylindrical
+            intervals are ``(r, θ, z)``; a full turn may wrap ``θ`` with
+            ``max[1] < min[1]``.
 
         Returns
         -------
@@ -734,9 +961,9 @@ class FluxelManager:
         refinement,
         not upper bounds on final cell levels. Each must be in [0, 32], and the
         largest requested level plus n_leaf_refinement must not exceed 32.
-        Regions use finite, strictly ordered corners; only positive-volume
-        overlap
-        counts. None and [] both mean no region requests for a new build.
+        Regions need finite corners and positive overlap. On a cylinder,
+        ``r`` and ``z`` stay ordered and ``θ`` may wrap. None and []
+        request no regions.
         max_cells also applies to balancing and final uniform refinement.
         The surface starts at its file coordinates with no rotation or
         translation.
@@ -770,8 +997,8 @@ class ApibmSession:
     ----------
     mesh : CfdAxisProjectedMesh
         Current CFD mesh snapshot (a new Python object on each access).
-    translation : list of float
-        Current rigid translation ``[tx, ty, tz]`` applied to the IB mesh.
+    translation : Float3
+        Current rigid translation ``(tx, ty, tz)`` applied to the IB mesh.
     rotation_quaternion : list of float
         Current rigid rotation as a unit quaternion ``[w, x, y, z]``.
     """
@@ -802,9 +1029,9 @@ class ApibmSession:
         """
         ...
     @property
-    def translation(self) -> list[float]:
+    def translation(self) -> Float3:
         """
-        Current absolute translation [tx, ty, tz] in surface length units.
+        Current absolute translation (tx, ty, tz) in surface length units.
         """
         ...
     @property
@@ -815,7 +1042,7 @@ class ApibmSession:
         ...
     def update_ib(
         self,
-        translation: list[float] | None = None,
+        translation: Float3 | None = None,
         rotation_quaternion: list[float] | None = None,
         warn_outside_refinement: bool = True,
         *,
@@ -831,8 +1058,8 @@ class ApibmSession:
 
         Parameters
         ----------
-        translation : list of float or None
-            Absolute translation ``[tx, ty, tz]``. ``None`` keeps the current
+        translation : Float3 or None
+            Absolute translation ``(tx, ty, tz)``. ``None`` keeps the current
             translation.
         rotation_quaternion : list of float or None
             Absolute unit quaternion ``[w, x, y, z]``. ``None`` keeps the
@@ -890,7 +1117,7 @@ class ApibmSession:
         self,
         target_level: int | None = None,
         refinement_regions: list[RefinementRegion] | None = None,
-        translation: list[float] | None = None,
+        translation: Float3 | None = None,
         rotation_quaternion: list[float] | None = None,
         warn_outside_refinement: bool = True,
         *,
@@ -904,11 +1131,13 @@ class ApibmSession:
         target_level : int or None
             Surface refinement target before final uniform leaf refinement.
             ``None`` keeps the current target level.
-        refinement_regions : list of tuple[list[float], list[float], int] | None
-            Optional region refinement requests as ``(min, max, level)``.
-            ``None`` keeps the current region list.
-        translation : list of float or None
-            Absolute translation ``[tx, ty, tz]``. ``None`` keeps the current
+        refinement_regions : list of tuple[Float3, Float3, int] | None
+            ``(min, max, level)`` intervals. ``None`` keeps the current list.
+            Cartesian intervals are world ``(x, y, z)``. Cylindrical
+            intervals are ``(r, θ, z)``; a full turn may wrap ``θ`` with
+            ``max[1] < min[1]``.
+        translation : Float3 or None
+            Absolute translation ``(tx, ty, tz)``. ``None`` keeps the current
             translation.
         rotation_quaternion : list of float or None
             Absolute unit quaternion ``[w, x, y, z]``. ``None`` keeps the
@@ -973,7 +1202,9 @@ class Forest:
     def __init__(
         self,
         bbox: BoundingBox,
-        base_res: list[int],
+        base_res: Int3,
+        *,
+        periodic: Bool3 | None = None,
     ) -> None:
         """
         Initialize the Forest.
@@ -982,8 +1213,11 @@ class Forest:
         ----------
         bbox : BoundingBox
             The physical bounds of the overall domain.
-        base_res : list of int
+        base_res : Int3
             The initial number of root blocks (trees) in [X, Y, Z] directions.
+        periodic : Bool3 or None (default: None)
+            Axes that wrap across the root grid as ``(x, y, z)``. ``None``
+            wraps none.
 
         Raises
         ------
@@ -1060,7 +1294,7 @@ class Forest:
         ...
 
     def refine_by_bbox(
-        self, min: list[float], max: list[float], target_level: int
+        self, min: Float3, max: Float3, target_level: int
     ) -> None:
         """
         Refines all cells that intersect with the specified bounding box
@@ -1068,10 +1302,10 @@ class Forest:
 
         Parameters
         ----------
-        min : list[float]
-            The [x, y, z] coordinates of the minimum corner of the box.
-        max : list[float]
-            The [x, y, z] coordinates of the maximum corner of the box.
+        min : Float3
+            Minimum corner ``(x, y, z)``.
+        max : Float3
+            Maximum corner ``(x, y, z)``.
         target_level : int
             The desired refinement level inside the box.
 

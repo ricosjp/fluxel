@@ -10,8 +10,10 @@ use pyo3::prelude::*;
 /// ----------
 /// bbox : BoundingBox
 ///     The physical bounds of the overall domain.
-/// base_res : list of int
+/// base_res : Int3
 ///     The initial number of root blocks (trees) in [X, Y, Z] directions.
+/// periodic : Bool3 or None (default: None)
+///     Axes that wrap across the root grid as ``(x, y, z)``. ``None`` wraps none.
 ///
 /// Raises
 /// ------
@@ -30,14 +32,17 @@ pub struct Forest {
 #[pymethods]
 impl Forest {
     #[new]
+    #[pyo3(signature = (bbox, base_res, *, periodic = None))]
     /// Initialize the Forest.
     ///
     /// Parameters
     /// ----------
     /// bbox : BoundingBox
     ///     The physical bounds of the overall domain.
-    /// base_res : list of int
+    /// base_res : Int3
     ///     The initial number of root blocks (trees) in [X, Y, Z] directions.
+    /// periodic : Bool3 or None (default: None)
+    ///     Axes that wrap across the root grid as ``(x, y, z)``. ``None`` wraps none.
     ///
     /// Raises
     /// ------
@@ -49,11 +54,17 @@ impl Forest {
     /// Creates populated level-0 cells, unlike the empty low-level Rust Forest.
     /// This Python API has no max_cells argument and does not inherit a manager's
     /// limit. Refinement changes cell ordering; flags refer to the current order.
-    fn new(bbox: &BoundingBox, base_res: [u32; 3]) -> PyResult<Self> {
+    fn new(bbox: &BoundingBox, base_res: [u32; 3], periodic: Option<[bool; 3]>) -> PyResult<Self> {
         let bbox = fluxel_geometry::BoundingBox::new(bbox.min, bbox.max)
             .map_err(|e| to_python(e.into()))?;
         Ok(Self {
-            inner: ManualGrid::new(bbox, base_res, BuildLimits::default()).map_err(to_python)?,
+            inner: ManualGrid::new(
+                bbox,
+                base_res,
+                BuildLimits::default(),
+                periodic.unwrap_or([false; 3]),
+            )
+            .map_err(to_python)?,
         })
     }
     /// Returns the current total number of cells.
@@ -112,10 +123,10 @@ impl Forest {
     ///
     /// Parameters
     /// ----------
-    /// min : list[float]
-    ///     The [x, y, z] coordinates of the minimum corner of the box.
-    /// max : list[float]
-    ///     The [x, y, z] coordinates of the maximum corner of the box.
+    /// min : Float3
+    ///     Minimum corner ``(x, y, z)``.
+    /// max : Float3
+    ///     Maximum corner ``(x, y, z)``.
     /// target_level : int
     ///     The desired refinement level inside the box.
     ///

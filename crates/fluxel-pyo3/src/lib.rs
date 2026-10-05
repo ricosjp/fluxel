@@ -15,7 +15,7 @@ mod pose;
 use pyo3::prelude::*;
 
 use apibm_session::ApibmSession;
-use cfd_mesh::{ApIbmFaceData, BoundingBox, CfdAxisProjectedMesh, CfdGhostCellMesh};
+use cfd_mesh::{ApIbmFaceData, BoundingBox, CfdAxisProjectedMesh, CfdGhostCellMesh, Cylindrical};
 use forest::Forest;
 use manager::FluxelManager;
 use pose::quaternion_from_axis_angle;
@@ -25,6 +25,7 @@ use pose::quaternion_from_axis_angle;
 #[pyo3(name = "_fluxel")]
 fn fluxel(_py: Python<'_>, m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<BoundingBox>()?;
+    m.add_class::<Cylindrical>()?;
     m.add_class::<CfdGhostCellMesh>()?;
     m.add_class::<ApIbmFaceData>()?;
     m.add_class::<CfdAxisProjectedMesh>()?;

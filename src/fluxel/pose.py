@@ -3,23 +3,23 @@
 from __future__ import annotations
 
 import math
-from collections.abc import Sequence
 
 from ._fluxel import _quaternion_from_axis_angle
 from .enums import Axis
+from .types import Float3
 
-AxisLike = Axis | Sequence[float]
+AxisLike = Axis | Float3
 
 
-def _as_axis_vector(axis: AxisLike) -> list[float]:
-    """Convert ``Axis`` or a 3-vector to a length-3 float list."""
+def _as_axis_vector(axis: AxisLike) -> Float3:
+    """Convert ``Axis`` or a 3-vector to ``(x, y, z)``."""
     if isinstance(axis, Axis):
-        vec = [0.0, 0.0, 0.0]
-        vec[int(axis)] = 1.0
-        return vec
+        components = [0.0, 0.0, 0.0]
+        components[int(axis)] = 1.0
+        return (components[0], components[1], components[2])
     if len(axis) != 3:
         raise ValueError("axis must have 3 components")
-    return [float(axis[0]), float(axis[1]), float(axis[2])]
+    return (float(axis[0]), float(axis[1]), float(axis[2]))
 
 
 def quaternion_from_axis_angle(
@@ -33,9 +33,9 @@ def quaternion_from_axis_angle(
 
     Parameters
     ----------
-    axis : Axis or sequence of float
+    axis : Axis or Float3
         Rotation axis. Pass ``Axis.X`` / ``Axis.Y`` / ``Axis.Z``, or a
-        Finite 3-vector which is normalized. An exactly zero vector yields
+        finite ``(x, y, z)`` which is normalized. An exactly zero vector yields
         identity; small nonzero vectors are normalized normally.
     angle : float
         Rotation angle. Radians by default; set ``degrees=True`` to pass

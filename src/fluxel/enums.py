@@ -4,7 +4,7 @@ import numpy as np
 
 
 class CoordinateType(IntEnum):
-    """Coordinate codes; generated meshes currently support Cartesian only."""
+    """Generated meshes use Cartesian (0) and cylindrical (1)."""
 
     Cartesian = 0
     Cylindrical = 1
@@ -12,7 +12,7 @@ class CoordinateType(IntEnum):
 
 
 class Axis(IntEnum):
-    """Cartesian component indices: X=0, Y=1, Z=2."""
+    """Logical axes 0, 1, 2: Cartesian X, Y, Z or cylindrical r, θ, z."""
 
     X = 0
     Y = 1
@@ -20,7 +20,7 @@ class Axis(IntEnum):
 
 
 class Direction(IntEnum):
-    """Signed face directions: -X,+X,-Y,+Y,-Z,+Z map to 0 through 5."""
+    """Signed logical directions 0..5. On a cylinder the names are r, θ, z."""
 
     XMinus = 0
     XPlus = 1
@@ -43,7 +43,7 @@ def split_axis_into_directions(axis: Axis) -> tuple[Direction, Direction]:
 
 
 def get_axis_from_direction(direction: Direction) -> Axis:
-    """Return the unsigned Cartesian axis of a Direction enum value."""
+    """Return the logical axis of a Direction value."""
     return Axis(direction.value // 2)
 
 

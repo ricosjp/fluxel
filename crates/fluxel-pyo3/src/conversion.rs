@@ -1,8 +1,8 @@
 //! Explicit array ownership. Shared exports use immutable bytes and bounded caches.
 //! This safe fallback copies at publication; no raw pointer or Rust alias is exposed.
 use numpy::{
-    ndarray::Dimension, Element, IntoPyArray, PyArray, PyArray1, PyArray2, PyArrayMethods,
-    PyUntypedArrayMethods,
+    ndarray::Dimension, Element, IntoPyArray, PyArray, PyArray1, PyArray2, PyArray3,
+    PyArrayMethods, PyUntypedArrayMethods,
 };
 use pyo3::prelude::*;
 
@@ -42,6 +42,16 @@ pub(crate) fn array2<T: Element + Copy, const K: usize>(
 ) -> PyResult<Py<PyArray2<T>>> {
     let flat: Vec<T> = values.iter().flatten().copied().collect();
     let array = flat.into_pyarray(py).reshape((values.len(), K))?;
+    finish(py, array, readonly)
+}
+/// Copy rank-3 values to shape (count, A, B), retaining that shape for zero rows.
+pub(crate) fn array3<T: Element + Copy, const A: usize, const B: usize>(
+    py: Python<'_>,
+    values: &[[[T; B]; A]],
+    readonly: bool,
+) -> PyResult<Py<PyArray3<T>>> {
+    let flat: Vec<T> = values.iter().flatten().flatten().copied().collect();
+    let array = flat.into_pyarray(py).reshape((values.len(), A, B))?;
     finish(py, array, readonly)
 }
 /// Share array storage with a fresh ndarray header; mutations to shape/dtype stay local to the view.

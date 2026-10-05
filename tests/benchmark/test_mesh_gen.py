@@ -27,8 +27,8 @@ DRIVAER_CONFIG = {
 class BoundingBoxConfig(BaseModel, frozen=True):
     """Axis-aligned domain bounding box (min / max corners)."""
 
-    min: list[float, float, float]
-    max: list[float, float, float]
+    min: fluxel.Float3
+    max: fluxel.Float3
 
 
 class DrivAerConfig(BaseModel, frozen=True):
@@ -37,9 +37,9 @@ class DrivAerConfig(BaseModel, frozen=True):
     input_stl: pathlib.Path
     target_level: int
     n_leaf_refinement: int
-    base_resolution: list[int, int, int]
+    base_resolution: fluxel.Int3
     bounding_box: BoundingBoxConfig
-    fluid_seed_point: list[float, float, float]
+    fluid_seed_point: fluxel.Float3
 
 
 def benchmark_with_group(func: Callable) -> Callable:

@@ -1,6 +1,6 @@
 //! Python input conventions terminate here; Rust receives validated values.
 use crate::errors::to_python;
-use fluxel_engine::{PoseUpdate, RefinementPlan, RefinementRegion};
+use fluxel_engine::{ParameterRegion, PoseUpdate, RefinementPlan, RefinementRegion};
 use fluxel_geometry::BoundingBox;
 use pyo3::prelude::*;
 pub(crate) type RegionInput = ([f64; 3], [f64; 3], u8);
@@ -14,9 +14,27 @@ pub(crate) fn regions(values: Vec<RegionInput>) -> PyResult<Vec<RefinementRegion
         })
         .collect()
 }
+/// Validate parameter intervals. A cylindrical build treats `(min, max, level)` as `(r, θ, z)`.
+pub(crate) fn parameter_regions(values: Vec<RegionInput>) -> PyResult<Vec<ParameterRegion>> {
+    values
+        .into_iter()
+        .map(|(min, max, level)| ParameterRegion::new(min, max, level).map_err(to_python))
+        .collect()
+}
 /// Convert a fresh-build request, treating absent regions as an empty list.
-pub(crate) fn plan(level: u8, values: Option<Vec<RegionInput>>) -> PyResult<RefinementPlan> {
-    RefinementPlan::new(level, regions(values.unwrap_or_default())?).map_err(to_python)
+///
+/// Cartesian tuples are world boxes. Cylindrical tuples are parameter intervals.
+pub(crate) fn plan(
+    level: u8,
+    values: Option<Vec<RegionInput>>,
+    cylindrical: bool,
+) -> PyResult<RefinementPlan> {
+    if cylindrical {
+        RefinementPlan::from_parameter(level, parameter_regions(values.unwrap_or_default())?)
+            .map_err(to_python)
+    } else {
+        RefinementPlan::new(level, regions(values.unwrap_or_default())?).map_err(to_python)
+    }
 }
 /// Apply the Python zero-quaternion compatibility rule, preserving omitted values.
 /// Finite quaternions with squared norm <= float64 epsilon become identity. Other
