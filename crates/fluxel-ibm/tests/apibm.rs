@@ -49,6 +49,14 @@ fn center_endpoint_and_length_units_are_preserved() {
         assert!(data.dist_owner_to_bnd()[0].abs() < 1e-12 * scale);
         assert!((data.dist_neighbour_to_bnd()[0] - 0.5 * scale).abs() < 1e-12 * scale);
         assert!(data.owner_near_boundary()[0]);
+        let point = data.owner_bnd_point()[0];
+        assert!((point[0] - 0.25 * scale).abs() < 1e-9 * scale);
+        assert!((point[1] - 0.5 * scale).abs() < 1e-9 * scale);
+        assert!((point[2] - 0.5 * scale).abs() < 1e-9 * scale);
+        assert!(data.owner_bnd_tangent()[0][0] > 0.9);
+        assert!(data.neighbour_bnd_tangent()[0][0] < -0.9);
+        assert!(data.owner_bnd_normal()[0][0] > 0.9);
+        assert!(data.neighbour_bnd_normal()[0][0] > 0.9);
     }
 }
 #[test]

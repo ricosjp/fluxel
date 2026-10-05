@@ -1,19 +1,22 @@
 //! Weighted linear least squares with the existing inverse-distance fallback.
+//!
+//! Probe offsets and the polynomial both use [`fluxel_geometry::SpatialDomain::sample_frame`]
+//! at the ghost-cell sample: Cartesian axes, or the cylindrical `(e_r, e_θ, e_z)` frame.
+//! Each polynomial component is that projection divided by the ghost cell's physical
+//! width in the same direction.
 use crate::{BoundarySurface, IbmError};
 use fluxel_core::{Direction, Forest};
-use fluxel_geometry::{get_global_id_from_phys, Geometry, RigidPose};
+use fluxel_geometry::{RigidPose, SpatialDomain};
 use nalgebra::{Matrix4, Vector3 as Vector, Vector4};
 #[inline]
 /// Locate a physical sample only if it falls in a cell marked fluid; otherwise return None.
 fn fluid_cell_from_phys(
     forest: &Forest,
-    geom: &Geometry,
+    domain: &SpatialDomain,
     gc_is_fluid: &[bool],
-    px: f64,
-    py: f64,
-    pz: f64,
+    point: [f64; 3],
 ) -> Option<usize> {
-    get_global_id_from_phys(forest, geom, [px, py, pz]).filter(|&gid| gc_is_fluid[gid])
+    domain.locate(forest, point).filter(|&gid| gc_is_fluid[gid])
 }
 
 /// One computational ghost cell: boundary data and a weighted linear interpolation row.
@@ -42,13 +45,12 @@ pub(super) struct GhostStencilRow {
 pub(super) fn try_build_ghost_stencil_row(
     global_id: usize,
     forest: &Forest,
-    geom: &Geometry,
+    domain: &SpatialDomain,
     mesh: &BoundarySurface,
     pose: &RigidPose,
     gc_is_fluid: &[bool],
 ) -> Result<Option<GhostStencilRow>, IbmError> {
-    let logical = forest.keys()[global_id].to_logical();
-
+    // Only a non-fluid cell that touches fluid receives a ghost row.
     if gc_is_fluid[global_id] {
         return Ok(None);
     }
@@ -64,9 +66,12 @@ pub(super) fn try_build_ghost_stencil_row(
         return Ok(None);
     }
 
-    let (center_arr, size_arr) = geom.cell_bounds(&logical);
+    let (center_arr, size_arr) = domain
+        .cell_sample(forest, global_id)
+        .map_err(|error| IbmError::Query(error.to_string()))?;
     let center = Vector::new(center_arr[0], center_arr[1], center_arr[2]);
 
+    // Reflect the sample through the nearest surface point in world coordinates.
     let hit = mesh.closest(center_arr, pose)?;
     let closest_point = Vector::new(hit.point[0], hit.point[1], hit.point[2]);
     let anchor_id = hit.anchor;
@@ -81,30 +86,24 @@ pub(super) fn try_build_ghost_stencil_row(
     let mut stencil_indices = [0usize; 8];
     let mut stencil_weights = [0.0f64; 8];
 
-    let eps_x = size_arr[0] * 0.1;
-    let eps_y = size_arr[1] * 0.1;
-    let eps_z = size_arr[2] * 0.1;
-
-    let offsets = [
-        [-eps_x, -eps_y, -eps_z],
-        [eps_x, -eps_y, -eps_z],
-        [-eps_x, eps_y, -eps_z],
-        [eps_x, eps_y, -eps_z],
-        [-eps_x, -eps_y, eps_z],
-        [eps_x, -eps_y, eps_z],
-        [-eps_x, eps_y, eps_z],
-        [eps_x, eps_y, eps_z],
-    ];
+    // Probe ±0.1 physical width along the ghost cell's local frame.
+    let [axis_r, axis_theta, axis_z] = domain.sample_frame(center_arr);
+    let offsets = frame_offsets(
+        [axis_r, axis_theta, axis_z],
+        [size_arr[0] * 0.1, size_arr[1] * 0.1, size_arr[2] * 0.1],
+    );
 
     let mut unique_fluid_cells = Vec::new();
     for offset in &offsets {
         if let Some(idx) = fluid_cell_from_phys(
             forest,
-            geom,
+            domain,
             gc_is_fluid,
-            image_point.x + offset[0],
-            image_point.y + offset[1],
-            image_point.z + offset[2],
+            [
+                image_point.x + offset[0],
+                image_point.y + offset[1],
+                image_point.z + offset[2],
+            ],
         ) {
             if !unique_fluid_cells.contains(&idx) {
                 unique_fluid_cells.push(idx);
@@ -117,15 +116,29 @@ pub(super) fn try_build_ghost_stencil_row(
     let mut m_mat = Matrix4::zeros();
     let mut a_row = [Vector4::zeros(); 8];
     let mut idw_w = [0.0; 8];
-
-    let l_ref = size_arr[0].max(1e-12);
+    // Fit 1, ξ, η, ζ. Each axis is the world offset projected on the local frame
+    // and divided by that direction's physical width, not by a single length.
+    let frame = [axis_r, axis_theta, axis_z];
+    let scales = [
+        size_arr[0].abs().max(1e-12),
+        size_arr[1].abs().max(1e-12),
+        size_arr[2].abs().max(1e-12),
+    ];
 
     for (k, &fluid_global_id) in unique_fluid_cells.iter().take(num_points).enumerate() {
-        let (c_arr, _) = geom.cell_bounds(&forest.keys()[fluid_global_id].to_logical());
+        let (c_arr, _) = domain
+            .cell_sample(forest, fluid_global_id)
+            .map_err(|error| IbmError::Query(error.to_string()))?;
 
-        let dx = (c_arr[0] - image_point.x) / l_ref;
-        let dy = (c_arr[1] - image_point.y) / l_ref;
-        let dz = (c_arr[2] - image_point.z) / l_ref;
+        let [dx, dy, dz] = scaled_frame_offset(
+            [
+                c_arr[0] - image_point.x,
+                c_arr[1] - image_point.y,
+                c_arr[2] - image_point.z,
+            ],
+            frame,
+            scales,
+        );
         let dist = (dx * dx + dy * dy + dz * dz).sqrt();
 
         let w = if dist < 1e-9 { 1e9 } else { 1.0 / dist };
@@ -139,6 +152,7 @@ pub(super) fn try_build_ghost_stencil_row(
 
     let mut use_idw_fallback = true;
 
+    // Linear least squares when four or more candidates make the normal matrix invertible.
     if num_points >= 4 {
         if let Some(inv_m) = m_mat.try_inverse() {
             use_idw_fallback = false;
@@ -166,6 +180,7 @@ pub(super) fn try_build_ghost_stencil_row(
         }
     }
 
+    // IDW when the linear fit is unavailable. No candidate becomes a self-weight of one.
     if use_idw_fallback {
         let mut sum_w = 0.0;
         (0..num_points).for_each(|k| {
@@ -195,4 +210,56 @@ pub(super) fn try_build_ghost_stencil_row(
         fallback: use_idw_fallback,
         unresolved: num_points == 0,
     }))
+}
+
+/// Project a world offset onto `frame` and divide each axis by its physical scale.
+fn scaled_frame_offset(delta: [f64; 3], frame: [[f64; 3]; 3], scales: [f64; 3]) -> [f64; 3] {
+    let mut local = [0.0; 3];
+    for axis in 0..3 {
+        let projection =
+            delta[0] * frame[axis][0] + delta[1] * frame[axis][1] + delta[2] * frame[axis][2];
+        local[axis] = projection / scales[axis];
+    }
+    local
+}
+
+fn frame_offsets(frame: [[f64; 3]; 3], steps: [f64; 3]) -> [[f64; 3]; 8] {
+    let mut offsets = [[0.0; 3]; 8];
+    for (index, offset) in offsets.iter_mut().enumerate() {
+        let signs = [
+            if index & 1 == 0 { -1.0 } else { 1.0 },
+            if index & 2 == 0 { -1.0 } else { 1.0 },
+            if index & 4 == 0 { -1.0 } else { 1.0 },
+        ];
+        for axis in 0..3 {
+            for component in 0..3 {
+                offset[component] += signs[axis] * steps[axis] * frame[axis][component];
+            }
+        }
+    }
+    offsets
+}
+
+#[cfg(test)]
+mod tests {
+    use super::scaled_frame_offset;
+
+    #[test]
+    fn basis_uses_each_local_axis_scale() {
+        let cartesian = [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]];
+        let local = scaled_frame_offset([2.0, 4.0, 8.0], cartesian, [2.0, 4.0, 8.0]);
+        assert!((local[0] - 1.0).abs() < 1e-12);
+        assert!((local[1] - 1.0).abs() < 1e-12);
+        assert!((local[2] - 1.0).abs() < 1e-12);
+        let theta = std::f64::consts::FRAC_PI_2;
+        let cylindrical = [
+            [theta.cos(), theta.sin(), 0.0],
+            [-theta.sin(), theta.cos(), 0.0],
+            [0.0, 0.0, 1.0],
+        ];
+        let radial = scaled_frame_offset([0.0, 0.4, 0.0], cylindrical, [0.4, 1.2, 0.5]);
+        assert!((radial[0] - 1.0).abs() < 1e-12);
+        assert!(radial[1].abs() < 1e-12);
+        assert!(radial[2].abs() < 1e-12);
+    }
 }

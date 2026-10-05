@@ -48,6 +48,20 @@ impl SurfaceBackend {
             )),
         }
     }
+    /// Triangle vertices in world space after the rigid pose.
+    pub fn world_triangles(&self, transform: &RigidPose) -> Vec<[[f64; 3]; 3]> {
+        let transform = pose(transform);
+        self.mesh
+            .indices()
+            .iter()
+            .map(|triangle| {
+                triangle.map(|index| {
+                    let point = transform.transform_point(self.mesh.vertices()[index as usize]);
+                    [point.x, point.y, point.z]
+                })
+            })
+            .collect()
+    }
     /// Query a posed surface against a physical cell AABB; map unsupported backend queries to IbmError.
     pub fn intersects(
         &self,

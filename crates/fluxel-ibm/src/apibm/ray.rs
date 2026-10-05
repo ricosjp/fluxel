@@ -1,20 +1,37 @@
+//! Dispatch a face cast to the Cartesian or cylindrical implementation.
+
+use super::{cartesian, cylindrical};
 use crate::{BoundaryState, IbmError};
 use fluxel_core::Axis;
+use fluxel_geometry::SpatialDomain;
 use fluxel_mesh::GridContext;
+
 #[derive(Debug)]
 pub(super) struct SideHit {
     pub distance: f64,
     pub near: bool,
     pub anchor: usize,
     pub patch: usize,
+    /// World intersection. This is not reconstructed from the clamped path length.
+    pub point: [f64; 3],
+    /// Unit tangent of the search path at the hit, in world components.
+    pub tangent: [f64; 3],
+    /// Unit triangle normal from vertex winding, in world components.
+    pub normal: [f64; 3],
 }
-/// Cast from one cell center along a face axis toward the other cell's axis coordinate.
-/// The caller supplies a positive-axis owner or negative-axis neighbour orientation;
-/// the transverse center coordinates need not coincide at coarse/fine interfaces.
-/// Pads the ray for roundoff, then clamps the corrected first-hit distance to the
-/// center separation. A hit at the center is valid. Near-boundary status uses this
-/// side's width and the largest domain extent. Returns None without a surface or
-/// hit; propagates backend query errors.
+
+pub(super) struct HitGeometry {
+    pub point: [f64; 3],
+    pub tangent: [f64; 3],
+    pub normal: [f64; 3],
+}
+
+/// Cast from one cell sample toward the other along that face's basis.
+///
+/// Cartesian casts are straight world-axis rays. Cylindrical `r` and `z` casts
+/// follow `e_r` and `e_z`. A cylindrical `θ` cast follows the arc at the caster's
+/// own radius and height. Across a periodic seam the forward angle is measured
+/// with `rem_euclid`.
 pub(super) fn side(
     grid: &GridContext,
     boundary: &BoundaryState,
@@ -22,39 +39,64 @@ pub(super) fn side(
     other: usize,
     axis: Axis,
     sign: f64,
+    triangles: &[[[f64; 3]; 3]],
 ) -> Result<Option<SideHit>, IbmError> {
-    let Some(surface) = boundary.surface() else {
+    if boundary.surface().is_none() {
         return Ok(None);
-    };
-    let cells = grid.background().geometry();
-    let center = cells.centers()[local];
-    let target = cells.centers()[other];
-    let ax = axis.as_index();
-    let max_dist = (target[ax] - center[ax]).abs();
-    let padding = 64.0 * f64::EPSILON * center.iter().map(|x| x.abs()).fold(max_dist, f64::max);
-    let mut direction = [0.0; 3];
-    direction[ax] = sign;
-    let mut origin = center;
-    origin[ax] -= sign * padding;
-    let Some(hit) = surface.ray(
-        origin,
-        direction,
-        max_dist + 2.0 * padding,
-        &boundary.pose(),
-    )?
-    else {
-        return Ok(None);
-    };
-    let distance = (hit.distance - padding).clamp(0.0, max_dist);
-    let width = cells.sizes()[local][ax].abs();
-    let bbox = grid.geometry().bounding_box();
-    let length = (0..3)
-        .map(|a| bbox.max()[a] - bbox.min()[a])
-        .fold(0.0, f64::max);
+    }
+    match grid.domain() {
+        SpatialDomain::Cartesian(_) => {
+            cartesian::side(grid, boundary, local, other, axis, sign, triangles)
+        }
+        SpatialDomain::Cylindrical(_) => {
+            cylindrical::side(grid, boundary, local, other, axis, sign, triangles)
+        }
+    }
+}
+
+pub(super) fn finish(
+    grid: &GridContext,
+    local: usize,
+    axis: Axis,
+    distance: f64,
+    anchor: usize,
+    patch: usize,
+    geometry: HitGeometry,
+) -> Result<Option<SideHit>, IbmError> {
+    let width = grid.background().geometry().sizes()[local][axis.as_index()].abs();
+    let length = grid.domain().domain_length();
     Ok(Some(SideHit {
         distance,
         near: distance / width <= width / length,
-        anchor: hit.anchor,
-        patch: hit.patch,
+        anchor,
+        patch,
+        point: geometry.point,
+        tangent: geometry.tangent,
+        normal: geometry.normal,
     }))
+}
+
+/// Unit normal `AB × AC` of one world triangle. A degenerate triangle returns zero.
+pub(super) fn triangle_normal(triangle: [[f64; 3]; 3]) -> [f64; 3] {
+    let ab = [
+        triangle[1][0] - triangle[0][0],
+        triangle[1][1] - triangle[0][1],
+        triangle[1][2] - triangle[0][2],
+    ];
+    let ac = [
+        triangle[2][0] - triangle[0][0],
+        triangle[2][1] - triangle[0][1],
+        triangle[2][2] - triangle[0][2],
+    ];
+    let normal = [
+        ab[1] * ac[2] - ab[2] * ac[1],
+        ab[2] * ac[0] - ab[0] * ac[2],
+        ab[0] * ac[1] - ab[1] * ac[0],
+    ];
+    let length = normal[0].hypot(normal[1]).hypot(normal[2]);
+    if length == 0.0 {
+        [0.0; 3]
+    } else {
+        [normal[0] / length, normal[1] / length, normal[2] / length]
+    }
 }

@@ -49,7 +49,7 @@ pub fn compute_gcibm(
             stencil::try_build_ghost_stencil_row(
                 id,
                 grid.forest(),
-                grid.geometry(),
+                grid.domain(),
                 surface,
                 &boundary.pose(),
                 classification.values(),

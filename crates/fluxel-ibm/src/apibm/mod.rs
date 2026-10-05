@@ -1,4 +1,7 @@
 //! Compressed APIBM payload, independent of topology construction and sessions.
+mod arc;
+mod cartesian;
+mod cylindrical;
 mod payload;
 mod ray;
 use crate::{BoundaryState, IbmError, IntersectionMask};
@@ -22,6 +25,10 @@ pub fn compute_apibm(
 ) -> Result<ApIbmData, IbmError> {
     mask.validate(grid, boundary)?;
     let topology = grid.background().topology();
+    let triangles = boundary
+        .surface()
+        .map(|surface| surface.world_triangles(&boundary.pose()))
+        .unwrap_or_default();
     let hits: Result<Vec<_>, IbmError> = (0..topology.n_internal_faces())
         .into_par_iter()
         .map(|i| {
@@ -31,10 +38,13 @@ pub fn compute_apibm(
                 return Ok(None);
             }
             let axis = topology.internal_axis()[i];
-            let Some(owner_hit) = ray::side(grid, boundary, owner, neighbour, axis, 1.0)? else {
+            let Some(owner_hit) =
+                ray::side(grid, boundary, owner, neighbour, axis, 1.0, &triangles)?
+            else {
                 return Ok(None);
             };
-            let Some(neighbour_hit) = ray::side(grid, boundary, neighbour, owner, axis, -1.0)?
+            let Some(neighbour_hit) =
+                ray::side(grid, boundary, neighbour, owner, axis, -1.0, &triangles)?
             else {
                 return Ok(None);
             };
@@ -54,6 +64,12 @@ pub fn compute_apibm(
             result.neighbour_bnd_anchor_id.push(neighbour.anchor);
             result.owner_bnd_patch_id.push(owner.patch);
             result.neighbour_bnd_patch_id.push(neighbour.patch);
+            result.owner_bnd_point.push(owner.point);
+            result.owner_bnd_tangent.push(owner.tangent);
+            result.owner_bnd_normal.push(owner.normal);
+            result.neighbour_bnd_point.push(neighbour.point);
+            result.neighbour_bnd_tangent.push(neighbour.tangent);
+            result.neighbour_bnd_normal.push(neighbour.normal);
         }
     }
     Ok(result)

@@ -87,6 +87,10 @@ impl BoundarySurface {
     pub fn triangle_count(&self) -> usize {
         self.anchor_to_patch.len()
     }
+    /// Patch ID of one triangle, or None when the anchor is out of range.
+    pub(crate) fn patch_of(&self, anchor: usize) -> Option<usize> {
+        self.anchor_to_patch.get(anchor).copied()
+    }
     /// Test a physical cell box against the posed surface; propagate backend query failure.
     pub(crate) fn intersects(
         &self,
@@ -128,6 +132,10 @@ impl BoundarySurface {
             anchor,
             patch: self.anchor_to_patch[anchor],
         })
+    }
+    /// World-space triangles after applying `pose`.
+    pub(crate) fn world_triangles(&self, pose: &RigidPose) -> Vec<[[f64; 3]; 3]> {
+        self.backend.world_triangles(pose)
     }
     /// Classify a physical point using majority parity over multiple posed-surface rays.
     /// This is a finite-ray heuristic, not a proof for open, self-intersecting or

@@ -1,6 +1,5 @@
 use crate::{BoundaryRevision, BoundaryState, IbmError, IntersectionMask};
 use fluxel_core::Direction;
-use fluxel_geometry::get_global_id_from_phys;
 use fluxel_mesh::{GridContext, MeshId};
 use rayon::prelude::*;
 use std::collections::VecDeque;
@@ -43,8 +42,10 @@ pub fn classify_fluid(
 ) -> Result<FluidClassification, IbmError> {
     mask.validate(grid, boundary)?;
     let forest = grid.forest();
-    let seed_id =
-        get_global_id_from_phys(forest, grid.geometry(), seed).ok_or(IbmError::SeedOutside)?;
+    let seed_id = grid
+        .domain()
+        .locate(forest, seed)
+        .ok_or(IbmError::SeedOutside)?;
     if mask.values()[seed_id] {
         return Err(IbmError::SeedOnBoundary);
     }
