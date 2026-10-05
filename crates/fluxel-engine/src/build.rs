@@ -61,7 +61,7 @@ pub(crate) fn prepare_apibm(
     let (mesh, report) = apibm_on_grid(&grid, boundary, plan.target_level)?;
     Ok((grid, mesh, report))
 }
-/// Build an immutable Cartesian background and compressed axis-projected payload.
+/// Build an immutable background and compressed axis-projected payload.
 ///
 /// The boundary uses its original coordinates (identity pose). Surface refinement
 /// and region refinement precede 2:1 balancing and final uniform leaf refinement.
@@ -81,6 +81,7 @@ pub(crate) fn prepare_apibm(
 /// let config = MeshBuildConfig::new(
 ///     BoundingBox::new([0.0; 3], [1.0; 3])?, [1; 3], 0,
 ///     BuildLimits { max_cells: 8 },
+///     [false; 3],
 /// )?;
 /// let output = build_apibm(&config, Boundary::None, RefinementPlan::new(0, vec![])?)?;
 /// assert_eq!(output.mesh.background().n_cells(), 1);
@@ -95,7 +96,7 @@ pub fn build_apibm(
     let (_, mesh, report) = prepare_apibm(config, &boundary, &plan)?;
     Ok(BuildOutput { mesh, report })
 }
-/// Build a Cartesian background, final fluid classification, and ghost stencils.
+/// Build a background, final fluid classification, and ghost stencils.
 ///
 /// Refinement follows [`build_apibm`]. `seed` is a finite physical point in the
 /// half-open domain; its containing cell must not intersect the surface. Even with

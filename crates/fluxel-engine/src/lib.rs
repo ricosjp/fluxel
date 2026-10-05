@@ -9,7 +9,7 @@ mod refinement;
 mod result;
 mod session;
 pub use build::{build_apibm, build_gcibm};
-pub use config::{BuildLimits, MeshBuildConfig, RefinementPlan, RefinementRegion};
+pub use config::{BuildLimits, MeshBuildConfig, ParameterRegion, RefinementPlan, RefinementRegion};
 pub use error::BuildError;
 pub use manual::ManualGrid;
 pub use result::{ApibmMesh, BuildOutput, BuildReport, GcibmMesh, MeshSnapshot};

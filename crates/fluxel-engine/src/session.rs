@@ -1,6 +1,7 @@
 //! Prepare and commit updates atomically. Preparing never mutates the current state.
 use crate::{
-    ApibmMesh, BuildError, BuildReport, MeshBuildConfig, RefinementPlan, RefinementRegion,
+    ApibmMesh, BuildError, BuildReport, MeshBuildConfig, ParameterRegion, RefinementPlan,
+    RefinementRegion,
 };
 use fluxel_geometry::RigidPose;
 use fluxel_ibm::{Boundary, BoundaryState};
@@ -31,8 +32,10 @@ impl PoseUpdate {
 pub struct RemeshRequest {
     /// New surface target, or None to keep the current target.
     pub target_level: Option<u8>,
-    /// None keeps the current regions; Some(empty) clears them.
+    /// None keeps the current world-box regions; Some(empty) clears them.
     pub regions: Option<Vec<RefinementRegion>>,
+    /// None keeps the current parameter regions; Some(empty) clears them.
+    pub parameter_regions: Option<Vec<ParameterRegion>>,
     /// Absolute pose changes, with omitted components preserved.
     pub pose: PoseUpdate,
 }
@@ -74,6 +77,10 @@ pub struct ApibmSession {
     report: BuildReport,
 }
 impl ApibmSession {
+    /// True when region tuples are parameter intervals `(r, θ, z)`.
+    pub fn is_cylindrical(&self) -> bool {
+        self.config.is_cylindrical()
+    }
     /// Build the initial mesh with identity boundary pose and revision zero.
     /// Stores the configuration, including cell limits, for subsequent remeshing.
     ///
@@ -144,10 +151,13 @@ impl ApibmSession {
     /// Rejects invalid pose/levels, cell-limit violations, and geometry query failures.
     /// Current state remains unchanged until a successful [`Self::commit`].
     pub fn prepare_remesh(&self, request: RemeshRequest) -> Result<PreparedUpdate, BuildError> {
-        let plan = RefinementPlan::new(
+        let mut plan = RefinementPlan::new(
             request.target_level.unwrap_or(self.plan.target_level),
             request.regions.unwrap_or_else(|| self.plan.regions.clone()),
         )?;
+        plan.parameter_regions = request
+            .parameter_regions
+            .unwrap_or_else(|| self.plan.parameter_regions.clone());
         let boundary = self.boundary.with_pose(request.pose.apply(self.pose())?);
         let (grid, mesh, report) = crate::build::prepare_apibm(&self.config, &boundary, &plan)?;
         Ok(PreparedUpdate {

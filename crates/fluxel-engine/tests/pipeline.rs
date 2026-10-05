@@ -9,6 +9,7 @@ fn config(base: [u32; 3], limit: usize) -> MeshBuildConfig {
         base,
         0,
         BuildLimits { max_cells: limit },
+        [false; 3],
     )
     .unwrap()
 }
@@ -157,6 +158,7 @@ fn manual_and_automatic_regions_match_and_reject_invalid_inputs() {
         BoundingBox::new([0.0; 3], [1.0; 3]).unwrap(),
         [2, 1, 1],
         BuildLimits::default(),
+        [false; 3],
     )
     .unwrap();
     grid.refine_region(
@@ -167,4 +169,42 @@ fn manual_and_automatic_regions_match_and_reject_invalid_inputs() {
     assert!(grid.refine_by_flags(&[true]).is_err());
     assert!(grid.uniform_refinement(33).is_err());
     assert_eq!(grid.num_cells(), 9);
+}
+#[test]
+fn cylindrical_build_uses_parameter_regions_and_rejects_world_boxes() {
+    let config = MeshBuildConfig::cylindrical(
+        [0.0; 3],
+        1.0,
+        2.0,
+        0.0,
+        std::f64::consts::TAU,
+        0.0,
+        1.0,
+        [1, 4, 1],
+        0,
+        BuildLimits::default(),
+        [false, true, false],
+    )
+    .unwrap();
+    let output = build_apibm(&config, Boundary::None, plan(0)).unwrap();
+    let volume: f64 = output.mesh.background().geometry().volumes().iter().sum();
+    assert!((volume - 3.0 * std::f64::consts::PI).abs() < 1e-9);
+    let seeded = build_gcibm(&config, Boundary::None, plan(0), [1.5, 0.0, 0.5]).unwrap();
+    assert!(seeded.mesh.background().n_cells() == 4);
+    let region =
+        ParameterRegion::new([1.0, 0.0, 0.0], [2.0, std::f64::consts::FRAC_PI_2, 1.0], 1).unwrap();
+    let refined = build_apibm(
+        &config,
+        Boundary::None,
+        RefinementPlan::from_parameter(0, vec![region]).unwrap(),
+    )
+    .unwrap();
+    assert_eq!(refined.mesh.background().n_cells(), 11);
+    let world = RefinementRegion::new(BoundingBox::new([0.0; 3], [1.0; 3]).unwrap(), 1).unwrap();
+    assert!(build_apibm(
+        &config,
+        Boundary::None,
+        RefinementPlan::new(0, vec![world]).unwrap(),
+    )
+    .is_err());
 }

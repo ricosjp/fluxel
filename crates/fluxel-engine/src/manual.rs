@@ -13,13 +13,15 @@ pub struct ManualGrid {
 impl ManualGrid {
     /// Validate the domain and resolution and populate level-0 root cells.
     /// Errors match [`MeshBuildConfig::new`], including a root count above `limits`.
+    /// `periodic` is `[x, y, z]` and wraps the outer faces of each true axis.
     pub fn new(
         bbox: BoundingBox,
         base_res: [u32; 3],
         limits: BuildLimits,
+        periodic: [bool; 3],
     ) -> Result<Self, BuildError> {
-        MeshBuildConfig::new(bbox, base_res, 0, limits)?;
-        let mut forest = Forest::with_cell_limit(base_res, limits.max_cells)?;
+        MeshBuildConfig::new(bbox, base_res, 0, limits, periodic)?;
+        let mut forest = Forest::with_periodic_cell_limit(base_res, limits.max_cells, periodic)?;
         forest.populate_root_cells();
         Ok(Self {
             forest,
